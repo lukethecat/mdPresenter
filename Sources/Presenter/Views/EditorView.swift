@@ -148,8 +148,9 @@ struct EditorView: NSViewRepresentable {
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
-        scroll.drawsBackground = true
-        scroll.backgroundColor = EditorChrome.background
+        // The editor sits ON liquid glass — no opaque background of its own.
+        scroll.drawsBackground = false
+        scroll.backgroundColor = .clear
         scroll.borderType = .noBorder
 
         let tv = MarkdownTextView()
@@ -161,7 +162,8 @@ struct EditorView: NSViewRepresentable {
         tv.isAutomaticTextReplacementEnabled = false
         tv.isAutomaticSpellingCorrectionEnabled = true
         tv.isContinuousSpellCheckingEnabled = false
-        tv.backgroundColor = EditorChrome.background
+        tv.drawsBackground = false
+        tv.backgroundColor = .clear
         tv.textColor = EditorChrome.text
         tv.insertionPointColor = .white
         tv.textContainerInset = NSSize(width: 52, height: 40)

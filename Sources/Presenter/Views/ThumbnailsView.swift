@@ -7,7 +7,7 @@ struct ThumbnailsView: View {
     @EnvironmentObject var state: AppState
 
     var body: some View {
-        GlassPanel(cornerRadius: 16, tint: Color.black.opacity(0.28)) {
+        GlassPanel(cornerRadius: 16, tint: Color.black.opacity(0.14)) {
             VStack(spacing: 0) {
                 HStack {
                     Text("幻灯片")

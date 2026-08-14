@@ -71,13 +71,13 @@ extension View {
 /// A floating glass panel: content on tinted, refractive glass.
 struct GlassPanel<Content: View>: View {
     var cornerRadius: CGFloat = 16
-    var tint: Color = Color.black.opacity(0.30)
+    var tint: Color = Color.black.opacity(0.14)
     var innerPadding: CGFloat = 0
     let content: Content
 
     init(
         cornerRadius: CGFloat = 16,
-        tint: Color = Color.black.opacity(0.30),
+        tint: Color = Color.black.opacity(0.14),
         innerPadding: CGFloat = 0,
         @ViewBuilder content: () -> Content
     ) {
@@ -96,27 +96,68 @@ struct GlassPanel<Content: View>: View {
     }
 }
 
-/// Ambient light behind the glass: deep ink base + a slow glow in the
-/// current slide's progress pigment. The glass panels refract it.
+/// Ambient light behind the glass — the "living" backdrop.
+///
+/// Instead of a solid black window, the base stays a translucent scrim so
+/// the glass can breathe: two radial glows sample the CURRENT slide's own
+/// background pigments (石青、宫墙红、天青…) and one accents with the
+/// progress pigment. As you move between slides the whole window color
+/// flows — the glass panels refract whatever glows beneath them.
 struct AmbientBackground: View {
-    var tint: Color
+    var colors: [Color] = []
+    var accent: Color = Color(hex: 0x1F6FB2)
 
     var body: some View {
         ZStack {
-            Color(hex: 0x0D0E11)
+            // Translucent scrim — transparency, not black.
+            Color.black.opacity(0.35)
+            // Primary glow: the slide's own background pigment.
             RadialGradient(
-                colors: [tint.opacity(0.14), .clear],
+                colors: [(colors.first ?? Color.clear).opacity(0.32), .clear],
                 center: .topTrailing,
-                startRadius: 30,
-                endRadius: 820
+                startRadius: 40,
+                endRadius: 950
             )
+            // Secondary glow: the gradient's end color (or the same pigment).
             RadialGradient(
-                colors: [Color(hex: 0x232A3A).opacity(0.35), .clear],
+                colors: [(colors.count > 1 ? colors[1] : (colors.first ?? Color.clear)).opacity(0.22), .clear],
                 center: .bottomLeading,
                 startRadius: 60,
-                endRadius: 900
+                endRadius: 850
+            )
+            // Progress pigment breathing in the center.
+            RadialGradient(
+                colors: [accent.opacity(0.10), .clear],
+                center: .center,
+                startRadius: 100,
+                endRadius: 650
+            )
+            // Glass sheen from the top edge.
+            LinearGradient(
+                colors: [Color.white.opacity(0.05), .clear],
+                startPoint: .top,
+                endPoint: .bottom
             )
         }
+        .animation(.easeInOut(duration: 1.2))
+    }
+}
+
+/// Makes the window itself transparent so Liquid Glass can refract the
+/// desktop and the ambient light — no more opaque black window backdrop.
+struct TransparentWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.isHidden = true
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let window = nsView.window else { return }
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.titlebarAppearsTransparent = true
+        window.hasShadow = true
     }
 }
 

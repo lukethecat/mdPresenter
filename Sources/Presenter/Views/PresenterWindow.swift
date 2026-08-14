@@ -97,6 +97,20 @@ struct PresenterView: View {
         GeometryReader { geo in
             ZStack {
                 Color(hex: 0x0B0C0E)
+                // The stage breathes with the slide's own pigment.
+                if let content = currentContent {
+                    let style = state.slideStyle(for: content)
+                    RadialGradient(
+                        colors: [
+                            Color(style.background.first ?? .black).opacity(0.16),
+                            .clear,
+                        ],
+                        center: .center,
+                        startRadius: 80,
+                        endRadius: 720
+                    )
+                    .animation(.easeInOut(duration: 1.0))
+                }
                 if let content = currentContent {
                     let style = state.slideStyle(for: content)
                     let available = geo.size

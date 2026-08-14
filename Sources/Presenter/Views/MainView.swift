@@ -32,9 +32,13 @@ struct MainView: View {
             }
         }
         .background(
-            AmbientBackground(tint: Color(ProgressColorEngine.color(at: progress)))
-                .ignoresSafeArea()
+            AmbientBackground(
+                colors: ambientColors,
+                accent: Color(ProgressColorEngine.color(at: progress))
+            )
+            .ignoresSafeArea()
         )
+        .background(TransparentWindowConfigurator())
         .onDrop(
             of: [UTType.image.identifier, UTType.fileURL.identifier],
             delegate: MediaDropDelegate(state: state, isTargeted: $isDropTargeted)
@@ -50,6 +54,16 @@ struct MainView: View {
         }
     }
 
+    /// The current slide's own background pigments — the ambient light
+    /// follows the deck, flowing from 石青 to 宫墙红 as you move.
+    private var ambientColors: [Color] {
+        guard let content = state.currentContent else {
+            return [Color(hex: 0x2E5F88)]
+        }
+        let style = state.slideStyle(for: content)
+        return style.background.map { Color($0) }
+    }
+
     private var editorPane: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
@@ -61,13 +75,16 @@ struct MainView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
+            .liquidGlass(cornerRadius: 16, tint: Color.black.opacity(0.20))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .glassRim(cornerRadius: 16)
+            .padding(10)
             statusBar
         }
-        .background(Color(hex: 0x1B1C1F))
     }
 
     private var statusBar: some View {
-        GlassPanel(cornerRadius: 13, tint: Color.black.opacity(0.32)) {
+        GlassPanel(cornerRadius: 13, tint: Color.black.opacity(0.16)) {
             HStack(spacing: 14) {
                 Text("\(state.slideCount) 张幻灯片")
                 Text("\(state.wordCount) 字")
@@ -123,7 +140,7 @@ private struct TurboStartBanner: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .liquidGlass(cornerRadius: 12, tint: Color.black.opacity(0.42), interactive: true)
+        .liquidGlass(cornerRadius: 12, tint: Color.black.opacity(0.28), interactive: true)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .glassRim(cornerRadius: 12)
         .overlay(

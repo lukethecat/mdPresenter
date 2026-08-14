@@ -13,7 +13,7 @@ struct InspectorView: View {
     @State private var tab = 0
 
     var body: some View {
-        GlassPanel(cornerRadius: 16, tint: Color.black.opacity(0.28)) {
+        GlassPanel(cornerRadius: 16, tint: Color.black.opacity(0.14)) {
             VStack(spacing: 0) {
                 SegmentedPicker(
                     options: [(0, "文本 Text"), (1, "设计 Design")],
