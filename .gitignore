@@ -4,3 +4,4 @@
 *.xcodeproj
 .DS_Store
 Presenter.app
+dist/
