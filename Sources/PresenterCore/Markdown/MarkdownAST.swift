@@ -60,6 +60,8 @@ public struct Block: Equatable {
     public var rows: [[String]] = []
     /// True when the paragraph was explicitly forced onto the slide with a leading tab.
     public var isTabbedOnSlide: Bool = false
+    /// iA Presenter image metadata (`x:`, `y:`, `size:`, `title:`, …).
+    public var metadata: [String: String] = [:]
 
     public init(kind: BlockKind) { self.kind = kind }
 

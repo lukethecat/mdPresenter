@@ -11,6 +11,7 @@ struct InlineTextView: View {
     let inlines: [Inline]
     var baseSize: CGFloat
     var family: String
+    var weight: Font.Weight = .regular
     var color: Color = .white
     var accent: Color? = nil
     var lineSpacing: CGFloat = 4
@@ -20,7 +21,7 @@ struct InlineTextView: View {
     }
 
     private func text() -> Text {
-        build(inlines, parentBold: false)
+        build(inlines, parentBold: false).fontWeight(weight)
     }
 
     private func build(_ inlines: [Inline], parentBold: Bool) -> Text {
@@ -249,6 +250,7 @@ struct SlideCanvas: View {
         case .mediaFull: mediaFullLayout(width: width, height: height)
         case .grid: gridLayout(width: width, height: height)
         case .table: tableLayout(width: width, height: height)
+        case .columns: columnsLayout(width: width, height: height)
         case .empty: emptyLayout(width: width, height: height)
         }
     }
@@ -304,7 +306,7 @@ struct SlideCanvas: View {
                 inlines: content.headline?.inlines ?? [],
                 baseSize: size,
                 family: style.headlineFamily,
-                
+                weight: swiftWeight(style.headlineWeight),
                 color: Color(style.headlineColor)
             )
             .minimumScaleFactor(0.5)
@@ -330,7 +332,7 @@ struct SlideCanvas: View {
                 inlines: content.headline?.inlines ?? [],
                 baseSize: headSize,
                 family: style.headlineFamily,
-                
+                weight: swiftWeight(style.headlineWeight),
                 color: Color(style.headlineColor)
             )
             .lineLimit(3)
@@ -404,7 +406,7 @@ struct SlideCanvas: View {
                 inlines: content.headline?.inlines ?? [],
                 baseSize: size,
                 family: style.headlineFamily,
-                
+                weight: swiftWeight(style.headlineWeight),
                 color: Color(style.headlineColor)
             )
             .lineLimit(4)
@@ -436,7 +438,7 @@ struct SlideCanvas: View {
                     inlines: headline.inlines,
                     baseSize: max(13, width * 0.028),
                     family: style.headlineFamily,
-                    
+                    weight: swiftWeight(style.headlineWeight),
                     color: Color(style.headlineColor)
                 )
                 .lineLimit(2)
@@ -457,7 +459,7 @@ struct SlideCanvas: View {
                     inlines: headline.inlines,
                     baseSize: max(14, width * 0.03),
                     family: style.headlineFamily,
-                    
+                    weight: swiftWeight(style.headlineWeight),
                     color: Color(style.headlineColor)
                 )
                 .lineLimit(2)
@@ -488,6 +490,63 @@ struct SlideCanvas: View {
         .padding(.vertical, height * 0.07)
     }
 
+    /// iA Presenter multi-column: each heading + its tabbed text becomes a
+    /// side-by-side column.
+    private func columnsLayout(width: CGFloat, height: CGFloat) -> some View {
+        // Group the on-slide blocks into heading-led columns, in order.
+        var columns: [(head: Block, texts: [Block])] = []
+        for block in content.onSlide {
+            if block.kind == .heading {
+                columns.append((head: block, texts: []))
+            } else if block.isTabbedOnSlide {
+                if columns.isEmpty {
+                    columns.append((head: Block(kind: .heading), texts: [block]))
+                } else {
+                    columns[columns.count - 1].texts.append(block)
+                }
+            }
+        }
+        let visible = Array(columns.prefix(3))
+        let columnWidth = width * 0.84 / CGFloat(max(1, visible.count))
+        return HStack(alignment: .top, spacing: width * 0.03) {
+            ForEach(Array(visible.enumerated()), id: \.offset) { _, column in
+                VStack(alignment: .leading, spacing: height * 0.02) {
+                    let headText = column.head.plainText
+                    if !headText.isEmpty {
+                        let headSize = LayoutEngine.fitFontSize(
+                            text: headText, family: style.headlineFamily, weight: style.headlineWeight,
+                            maxSize: width / 12, minSize: 16,
+                            in: CGSize(width: columnWidth * 0.92, height: height * 0.3)
+                        )
+                        InlineTextView(
+                            inlines: column.head.inlines,
+                            baseSize: headSize,
+                            family: style.headlineFamily,
+                            weight: swiftWeight(style.headlineWeight),
+                            color: Color(style.headlineColor)
+                        )
+                        .lineLimit(2)
+                        Rectangle()
+                            .fill(Color(style.accent))
+                            .frame(width: columnWidth * 0.16, height: max(2, height * 0.005))
+                    }
+                    ForEach(Array(column.texts.enumerated()), id: \.offset) { _, textBlock in
+                        InlineTextView(
+                            inlines: textBlock.inlines,
+                            baseSize: max(13, width * 0.02),
+                            family: style.headlineFamily,
+                            color: Color(style.textColor)
+                        )
+                        .lineLimit(6)
+                    }
+                }
+                .frame(width: columnWidth, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .padding(.vertical, height * 0.08)
+    }
+
     private func tableLayout(width: CGFloat, height: CGFloat) -> some View {
         let table = content.onSlide.first { $0.kind == .table }
         let headline = content.headline?.plainText ?? ""
@@ -502,7 +561,7 @@ struct SlideCanvas: View {
                     inlines: content.headline?.inlines ?? [],
                     baseSize: size,
                     family: style.headlineFamily,
-                    
+                    weight: swiftWeight(style.headlineWeight),
                     color: Color(style.headlineColor)
                 )
                 .lineLimit(2)

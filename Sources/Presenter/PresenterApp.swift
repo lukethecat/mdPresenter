@@ -49,6 +49,7 @@ struct PresenterApp: App {
             Button("讲义 PDF（可读摘要）…") { ExportCoordinator.exportHandoutPDF(state) }
             Button("Markdown…") { ExportCoordinator.exportMarkdown(state) }
             Button("摘要 Markdown…") { ExportCoordinator.exportSummaryMarkdown(state) }
+            Button("iA Presenter 格式 (.iapresenter)…") { ExportCoordinator.exportIAPresenter(state) }
             Button("幻灯片 PNG 图片…") { ExportCoordinator.exportImages(state) }
         }
         CommandMenu("演示") {
@@ -182,6 +183,7 @@ struct MainToolbar: ToolbarContent {
                 Button("讲义 PDF（可读摘要）…") { ExportCoordinator.exportHandoutPDF(state) }
                 Button("Markdown…") { ExportCoordinator.exportMarkdown(state) }
                 Button("摘要 Markdown…") { ExportCoordinator.exportSummaryMarkdown(state) }
+            Button("iA Presenter 格式 (.iapresenter)…") { ExportCoordinator.exportIAPresenter(state) }
                 Button("幻灯片 PNG 图片…") { ExportCoordinator.exportImages(state) }
             } label: {
                 Image(systemName: "square.and.arrow.up")

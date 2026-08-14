@@ -7,8 +7,16 @@ on:
 
 jobs:
   build-and-test:
-    name: Build & Test (macOS)
-    runs-on: macos-15
+    name: Build & Test (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15   # Apple Silicon
+            label: arm64
+          - os: macos-13   # Intel
+            label: x86_64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: Build

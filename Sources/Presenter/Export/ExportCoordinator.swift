@@ -19,8 +19,11 @@ enum ExportCoordinator {
 
     static func openDocument(_ state: AppState) {
         let panel = NSOpenPanel()
+        // `.presenter` / `.iapresenter` can be either our JSON documents or
+        // iA Presenter directory bundles — both are accepted.
         panel.allowedContentTypes = [
             UTType(filenameExtension: "presenter"),
+            UTType(filenameExtension: "iapresenter"),
             UTType(filenameExtension: "md"),
             UTType(filenameExtension: "markdown"),
             UTType.plainText,
@@ -30,25 +33,32 @@ enum ExportCoordinator {
             guard response == .OK, let url = panel.url else { return }
             DispatchQueue.main.async {
                 do {
-                    let data = try Data(contentsOf: url)
-                    if url.pathExtension == "presenter" {
-                        let doc = try DocumentFile.decode(data)
-                        state.load(document: doc, url: url)
-                    } else {
-                        let raw = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
-                        let markdown: String
-                        switch TurboStart.convert(raw) {
-                        case .converted(let md): markdown = md
-                        case .untouched(let md): markdown = md
-                        }
-                        state.load(
-                            document: DocumentFile(
-                                title: url.deletingPathExtension().lastPathComponent,
-                                markdown: markdown
-                            ),
-                            url: nil
-                        )
+                    // 1. iA Presenter bundle (a directory with text.md)?
+                    if let iaDoc = try IAPresenterImporter.document(from: url) {
+                        state.load(document: iaDoc, url: url)
+                        return
                     }
+                    // 2. Our own JSON `.presenter` document?
+                    let data = try Data(contentsOf: url)
+                    if url.pathExtension == "presenter",
+                       let doc = try? DocumentFile.decode(data) {
+                        state.load(document: doc, url: url)
+                        return
+                    }
+                    // 3. Plain markdown / text — TurboStart converts prose.
+                    let raw = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
+                    let markdown: String
+                    switch TurboStart.convert(raw) {
+                    case .converted(let md): markdown = md
+                    case .untouched(let md): markdown = md
+                    }
+                    state.load(
+                        document: DocumentFile(
+                            title: url.deletingPathExtension().lastPathComponent,
+                            markdown: markdown
+                        ),
+                        url: nil
+                    )
                 } catch {
                     presentError("无法打开文稿", error, state)
                 }
@@ -135,6 +145,23 @@ enum ExportCoordinator {
             guard response == .OK, let url = panel.url else { return }
             let markdown = MarkdownExporter.markdown(from: state.currentDocument())
             try? markdown.data(using: .utf8)?.write(to: url)
+        }
+    }
+
+    /// Export back into the iA Presenter bundle format (text.md + info.json
+    /// + assets/) — round-trip compatible with iA's own app.
+    static func exportIAPresenter(_ state: AppState) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "iapresenter")].compactMap { $0 }
+        panel.nameFieldStringValue = state.documentTitle + ".iapresenter"
+        panel.canCreateDirectories = true
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                try IAPresenterImporter.write(state.currentDocument(), to: url)
+            } catch {
+                presentError("无法导出 iA Presenter 文件", error, state)
+            }
         }
     }
 

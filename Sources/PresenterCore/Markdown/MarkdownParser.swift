@@ -90,8 +90,9 @@ public struct MarkdownParser {
                 continue
             }
 
-            // Unordered list
+            // Unordered list (iA: a leading tab makes the whole list visible)
             if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
+                let tabbed = raw.hasPrefix("\t")
                 var items: [String] = []
                 while i < lines.count {
                     let t = lines[i].trimmingCharacters(in: .whitespaces)
@@ -101,12 +102,14 @@ public struct MarkdownParser {
                 }
                 var block = Block(kind: .bulletList)
                 block.lines = items
+                block.isTabbedOnSlide = tabbed
                 blocks.append(block)
                 continue
             }
 
-            // Ordered list
+            // Ordered list (iA: a leading tab makes the whole list visible)
             if isOrderedListItem(line) {
+                let tabbed = raw.hasPrefix("\t")
                 var items: [String] = []
                 while i < lines.count {
                     let t = lines[i].trimmingCharacters(in: .whitespaces)
@@ -120,6 +123,7 @@ public struct MarkdownParser {
                 }
                 var block = Block(kind: .orderedList)
                 block.lines = items
+                block.isTabbedOnSlide = tabbed
                 blocks.append(block)
                 continue
             }
@@ -133,8 +137,22 @@ public struct MarkdownParser {
 
             // Standalone image: ![alt](ref)
             if let media = parseStandaloneImage(line) {
-                blocks.append(media)
                 i += 1
+                var block = media
+                block.metadata = consumeImageMetadata(lines: lines, from: &i)
+                blocks.append(block)
+                continue
+            }
+
+            // iA Presenter: a bare image URL or local path on its own line
+            // (https://example.com/a.png, /assets/photo.jpg) is a visible image.
+            if isBareImageLine(line) {
+                var block = Block(kind: .image)
+                block.mediaRef = line
+                block.alt = (line as NSString).lastPathComponent
+                i += 1
+                block.metadata = consumeImageMetadata(lines: lines, from: &i)
+                blocks.append(block)
                 continue
             }
 
@@ -178,7 +196,41 @@ public struct MarkdownParser {
         if trimmedLine.hasPrefix("|") { return true }
         if isOrderedListItem(trimmedLine) { return true }
         if trimmedLine == "---" || trimmedLine == "***" || trimmedLine == "___" { return true }
+        if isBareImageLine(trimmedLine) { return true }
         return false
+    }
+
+    /// iA Presenter: a bare image URL or local path on its own line is a
+    /// visible image (https://…/a.png, /assets/photo.jpg, media://…).
+    static func isBareImageLine(_ line: String) -> Bool {
+        let lower = line.lowercased()
+        if lower.hasPrefix("media://") { return true }
+        let hasImageExtension = lower.range(
+            of: "\\.(png|jpe?g|gif|webp|svg|tiff?|heic|avif|bmp)$",
+            options: .regularExpression
+        ) != nil
+        guard hasImageExtension else { return false }
+        return lower.hasPrefix("http://") || lower.hasPrefix("https://") || line.hasPrefix("/") || line.hasPrefix(".")
+    }
+
+    /// iA Presenter image metadata lines (`x:`, `y:`, `size:`, `title:`, …)
+    /// directly following an image belong to it — never to speaker notes.
+    static func consumeImageMetadata(lines: [String], from i: inout Int) -> [String: String] {
+        let knownKeys = ["x", "y", "size", "background", "filter", "opacity", "title"]
+        var metadata: [String: String] = [:]
+        while i < lines.count {
+            let t = lines[i].trimmingCharacters(in: .whitespaces)
+            guard let colon = t.firstIndex(of: ":"), !t.isEmpty, t.startIndex < colon else { break }
+            let key = String(t[..<colon]).trimmingCharacters(in: .whitespaces).lowercased()
+            guard knownKeys.contains(key) else { break }
+            var value = String(t[t.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+            if value.hasPrefix("\""), value.hasSuffix("\""), value.count >= 2 {
+                value = String(value.dropFirst().dropLast())
+            }
+            metadata[key] = value
+            i += 1
+        }
+        return metadata
     }
 
     static func parseHeading(_ line: String) -> Block? {
@@ -300,6 +352,30 @@ public struct MarkdownParser {
                     result.append(.link(text: parseInline(link.0), url: link.1))
                     i = link.2
                     continue
+                }
+            }
+            // iA strikethrough ~~text~~ → rendered as oblique (no dedicated style).
+            if ch == "~" {
+                let next = input.index(after: i)
+                if next < input.endIndex, input[next] == "~" {
+                    if let strike = parseEmphasis(from: input, start: i, marker: "~~") {
+                        flushBuffer()
+                        result.append(.italic(parseInline(strike.0)))
+                        i = strike.1
+                        continue
+                    }
+                }
+            }
+            // iA highlight ==text== → rendered as bold.
+            if ch == "=" {
+                let next = input.index(after: i)
+                if next < input.endIndex, input[next] == "=" {
+                    if let highlight = parseEmphasis(from: input, start: i, marker: "==") {
+                        flushBuffer()
+                        result.append(.bold(parseInline(highlight.0)))
+                        i = highlight.1
+                        continue
+                    }
                 }
             }
             if ch == "*" {

@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Universal .app + DMG
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build universal binary (arm64 + x86_64)
+        run: swift build -c release --arch arm64 --arch x86_64
+
+      - name: Assemble mdPresenter.app
+        run: UNIVERSAL=1 ./scripts/make-app.sh
+
+      - name: Create DMG
+        run: |
+          hdiutil create -volname "mdPresenter" \
+            -srcfolder .build/app-bundle/mdPresenter.app \
+            -ov -format UDZO \
+            "mdPresenter-macOS-universal.dmg"
+
+      - name: Verify bundle
+        run: |
+          lipo -info .build/app-bundle/mdPresenter.app/Contents/MacOS/Presenter
+          ls -la mdPresenter-macOS-universal.dmg
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            mdPresenter-macOS-universal.dmg
+            .build/app-bundle/mdPresenter.app
+          generate_release_notes: true

@@ -18,6 +18,7 @@ public enum SlideLayoutKind: String {
     case grid         // several media blocks
     case table        // table with headline
     case quote        // headline + supporting text
+    case columns      // iA multi-column: heading + text pairs side by side
     case empty
 }
 
@@ -61,6 +62,10 @@ public struct ContentResolver {
         var headline: Block? = nil
 
         let headings = slide.headings
+        // iA multi-column: several headings each followed by tabbed text
+        // form side-by-side columns; all headings stay visible.
+        let isColumns = !isTitle && isColumnSlide(onSlide: onSlide)
+
         if isTitle {
             if !headings.isEmpty { title = headings[0] }
             if headings.count > 1 { subtitle = headings[1] }
@@ -69,6 +74,9 @@ public struct ContentResolver {
             onSlide.removeAll { block in
                 block.kind == .heading && !kept.contains(block)
             }
+        } else if isColumns {
+            headline = nil
+            kicker = nil
         } else {
             let h1 = headings.first { $0.level == 1 }
             let h2 = headings.first { $0.level == 2 }
@@ -84,7 +92,7 @@ public struct ContentResolver {
         }
 
         // Pick the automatic layout.
-        let layout = pickLayout(isTitle: isTitle, onSlide: onSlide, headline: headline, title: title)
+        let layout = pickLayout(isTitle: isTitle, onSlide: onSlide, headline: headline, title: title, isColumns: isColumns)
 
         return SlideContent(
             slide: slide,
@@ -101,11 +109,36 @@ public struct ContentResolver {
         )
     }
 
+    /// Two or more headings each followed by tabbed visible text = columns.
+    static func isColumnSlide(onSlide: [Block]) -> Bool {
+        var headingCount = 0
+        var tabbedCount = 0
+        var pendingHeading = false
+        var pairs = 0
+        for block in onSlide {
+            switch block.kind {
+            case .heading:
+                headingCount += 1
+                pendingHeading = true
+            case .paragraph, .bulletList, .orderedList:
+                if block.isTabbedOnSlide {
+                    tabbedCount += 1
+                    if pendingHeading { pairs += 1 }
+                    pendingHeading = false
+                }
+            default:
+                break
+            }
+        }
+        return headingCount >= 2 && tabbedCount >= 2 && pairs >= 2
+    }
+
     static func pickLayout(
         isTitle: Bool,
         onSlide: [Block],
         headline: Block?,
-        title: Block?
+        title: Block?,
+        isColumns: Bool
     ) -> SlideLayoutKind {
         if isTitle { return .title }
         let media = onSlide.filter { $0.isMedia }
@@ -122,6 +155,7 @@ public struct ContentResolver {
             }
             return .mediaFull
         }
+        if isColumns { return .columns }
         if !textBlocks.isEmpty && headline != nil { return .quote }
         if headline != nil { return .statement }
         if onSlide.isEmpty { return .empty }

@@ -1,22 +1,32 @@
 #!/bin/bash
-# 将 Presenter 打包为可双击运行的 macOS 应用。
-# 用法: ./scripts/make-app.sh
+# 将 mdPresenter 打包为可双击运行的 macOS 应用。
+# 用法:
+#   ./scripts/make-app.sh              # 本机架构
+#   UNIVERSAL=1 ./scripts/make-app.sh  # Intel + Apple Silicon 通用二进制
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP_NAME="Presenter"
-BUILD_DIR=".build/release"
-APP_DIR="$BUILD_DIR/$APP_NAME.app"
+APP_NAME="mdPresenter"
+BIN_NAME="Presenter"
+BUNDLE_ID="com.mdpresenter.app"
+OUT_DIR=".build/app-bundle"
 
-echo "==> 构建 Release 版本…"
-swift build -c release
+echo "==> 构建 Release 版本 (${UNIVERSAL:+universal}${UNIVERSAL:-native})…"
+if [ "${UNIVERSAL:-0}" = "1" ]; then
+    swift build -c release --arch arm64 --arch x86_64
+    BIN_PATH="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/$BIN_NAME"
+else
+    swift build -c release
+    BIN_PATH="$(swift build -c release --show-bin-path)/$BIN_NAME"
+fi
 
+APP_DIR="$OUT_DIR/$APP_NAME.app"
 echo "==> 组装 $APP_DIR …"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
 
-cp "$BUILD_DIR/Presenter" "$APP_DIR/Contents/MacOS/$APP_NAME"
+cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$BIN_NAME"
 
 cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -24,11 +34,11 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Presenter</string>
+    <string>mdPresenter</string>
     <key>CFBundleDisplayName</key>
-    <string>Presenter</string>
+    <string>mdPresenter</string>
     <key>CFBundleIdentifier</key>
-    <string>com.example.presenter.clone</string>
+    <string>com.mdpresenter.app</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>
@@ -42,15 +52,18 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>致敬 iA Presenter 的学习项目，非官方产品。</string>
+    <string>MIT 协议开源，由 DeepSeek Harness 协作开发。致敬 iA Presenter，非官方产品。</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>
 </plist>
 PLIST
 
-echo "==> 临时签名（Apple Silicon 本地运行必需）…"
+echo "==> 临时签名（本地运行必需）…"
 codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
 
 echo "✅ 完成: $APP_DIR"
+if [ "${UNIVERSAL:-0}" = "1" ]; then
+    lipo -info "$APP_DIR/Contents/MacOS/$BIN_NAME"
+fi
 echo "双击即可运行，或: open \"$APP_DIR\""
