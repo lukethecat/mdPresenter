@@ -32,9 +32,10 @@ struct MainView: View {
             }
         }
         .background(
-            AmbientBackground(
-                colors: ambientColors,
-                accent: Color(ProgressColorEngine.color(at: progress))
+            FluidBackground(
+                id: ambientID,
+                pigments: ambientPigments,
+                accent: ProgressColorEngine.color(at: progress)
             )
             .ignoresSafeArea()
         )
@@ -54,14 +55,17 @@ struct MainView: View {
         }
     }
 
-    /// The current slide's own background pigments — the ambient light
-    /// follows the deck, flowing from 石青 to 宫墙红 as you move.
-    private var ambientColors: [Color] {
+    /// The current slide's own background pigments — the fluid backdrop
+    /// IS the slide's color, flowing from 石青 to 宫墙红 as you move.
+    private var ambientPigments: [NSColor] {
         guard let content = state.currentContent else {
-            return [Color(hex: 0x2E5F88)]
+            return [NSColor(hex: 0x2E5F88)]
         }
-        let style = state.slideStyle(for: content)
-        return style.background.map { Color($0) }
+        return state.slideStyle(for: content).background
+    }
+
+    private var ambientID: String {
+        "\(state.currentSlide)-\(state.settings.themeId)-\(state.settings.colorMode.rawValue)"
     }
 
     private var editorPane: some View {
@@ -75,7 +79,10 @@ struct MainView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
-            .liquidGlass(cornerRadius: 16, tint: Color.black.opacity(0.20))
+            .liquidGlass(
+                cornerRadius: 16,
+                tint: Color.black.opacity(state.currentSlideIsLight ? 0.36 : 0.22)
+            )
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .glassRim(cornerRadius: 16)
             .padding(10)
@@ -84,7 +91,10 @@ struct MainView: View {
     }
 
     private var statusBar: some View {
-        GlassPanel(cornerRadius: 13, tint: Color.black.opacity(0.16)) {
+        GlassPanel(
+            cornerRadius: 13,
+            tint: Color.black.opacity(state.currentSlideIsLight ? 0.32 : 0.16)
+        ) {
             HStack(spacing: 14) {
                 Text("\(state.slideCount) 张幻灯片")
                 Text("\(state.wordCount) 字")
@@ -140,7 +150,7 @@ private struct TurboStartBanner: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .liquidGlass(cornerRadius: 12, tint: Color.black.opacity(0.28), interactive: true)
+        .liquidGlass(cornerRadius: 12, tint: Color.black.opacity(state.currentSlideIsLight ? 0.40 : 0.28), interactive: true)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .glassRim(cornerRadius: 12)
         .overlay(

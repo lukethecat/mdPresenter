@@ -13,7 +13,7 @@ struct SlidePreviewPanel: View {
     @State private var isDropTargeted = false
 
     var body: some View {
-        GlassPanel(cornerRadius: 16, tint: Color.black.opacity(0.14)) {
+        GlassPanel(cornerRadius: 16, tint: Color.black.opacity(state.currentSlideIsLight ? 0.32 : 0.14)) {
             VStack(spacing: 0) {
                 header
                 Divider().background(Color.white.opacity(0.07))

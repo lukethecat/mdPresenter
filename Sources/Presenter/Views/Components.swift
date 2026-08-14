@@ -96,55 +96,138 @@ struct GlassPanel<Content: View>: View {
     }
 }
 
-/// Ambient light behind the glass — the "living" backdrop.
+/// Fluid glass backdrop — water, not black.
 ///
-/// Instead of a solid black window, the base stays a translucent scrim so
-/// the glass can breathe: two radial glows sample the CURRENT slide's own
-/// background pigments (石青、宫墙红、天青…) and one accents with the
-/// progress pigment. As you move between slides the whole window color
-/// flows — the glass panels refract whatever glows beneath them.
-struct AmbientBackground: View {
-    var colors: [Color] = []
-    var accent: Color = Color(hex: 0x1F6FB2)
+/// The window background IS the current slide's pigments. A colored wash
+/// (dimmed only as much as readability requires) is overlaid with five
+/// large soft blobs of pure pigment — brightened and deepened variants —
+/// that drift on slow Lissajous paths like water moving across glass.
+/// When the slide changes, the whole palette morphs over ~1.5s, and the
+/// wash's gradient direction slowly rotates. On macOS 11 the blobs are
+/// static; macOS 12+ gets the full flowing animation.
+struct FluidBackground: View {
+    var id: String = ""
+    var pigments: [NSColor] = [NSColor(hex: 0x2E5F88)]
+    var accent: NSColor = NSColor(hex: 0x1F6FB2)
+
+    @State private var washColors: [Color] = [
+        Color(NSColor(hex: 0x35678F)), Color(NSColor(hex: 0x2A4460)),
+    ]
+    @State private var glowColors: [Color] = [
+        Color(NSColor(hex: 0x2E5F88)), Color(NSColor(hex: 0x2E5F88)),
+        Color(NSColor(hex: 0x5E8AB5)), Color(NSColor(hex: 0x6F97BE)),
+        Color(NSColor(hex: 0x1C3A57)),
+    ]
+    @State private var accentColor: Color = Color(NSColor(hex: 0x1F6FB2))
 
     var body: some View {
-        ZStack {
-            // Translucent scrim — transparency, not black.
-            Color.black.opacity(0.35)
-            // Primary glow: the slide's own background pigment.
-            RadialGradient(
-                colors: [(colors.first ?? Color.clear).opacity(0.32), .clear],
-                center: .topTrailing,
-                startRadius: 40,
-                endRadius: 950
-            )
-            // Secondary glow: the gradient's end color (or the same pigment).
-            RadialGradient(
-                colors: [(colors.count > 1 ? colors[1] : (colors.first ?? Color.clear)).opacity(0.22), .clear],
-                center: .bottomLeading,
-                startRadius: 60,
-                endRadius: 850
-            )
-            // Progress pigment breathing in the center.
-            RadialGradient(
-                colors: [accent.opacity(0.10), .clear],
-                center: .center,
-                startRadius: 100,
-                endRadius: 650
-            )
-            // Glass sheen from the top edge.
-            LinearGradient(
-                colors: [Color.white.opacity(0.05), .clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+        field(time: 0)
+            .onAppear(perform: syncPalette)
+            .onChange(of: id) { _ in
+                withAnimation(.easeInOut(duration: 1.5)) {
+                    syncPalette()
+                }
+            }
+    }
+
+    // MARK: Palette
+
+    private func syncPalette() {
+        let fallback = NSColor(hex: 0x2E5F88)
+        let c0 = pigments.first ?? fallback
+        let c1 = pigments.count > 1 ? pigments[1] : c0
+
+        // Wash: the slide color itself. Light pigments are dimmed a little
+        // so chrome text stays readable; dark pigments are lifted slightly.
+        let washA = c0.isDark ? c0.mixed(with: .white, t: 0.06) : c0.mixed(with: .black, t: 0.46)
+        let washB = c1.isDark ? c1.mixed(with: .white, t: 0.04) : c1.mixed(with: .black, t: 0.50)
+        washColors = [Color(washA), Color(washB)]
+
+        // Glows: pure pigment plus brightened/deepened water variants.
+        glowColors = [
+            Color(c0),
+            Color(c1),
+            Color(c0.mixed(with: .white, t: 0.34)),
+            Color(c1.mixed(with: .white, t: 0.42)),
+            Color(c1.mixed(with: .black, t: 0.18)),
+        ]
+        accentColor = Color(accent)
+    }
+
+    // MARK: Field
+
+    @ViewBuilder
+    private func field(time: TimeInterval) -> some View {
+        if #available(macOS 12.0, *) {
+            TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { timeline in
+                fieldBody(time: timeline.date.timeIntervalSinceReferenceDate)
+            }
+        } else {
+            fieldBody(time: 0)
         }
-        .animation(.easeInOut(duration: 1.2))
+    }
+
+    private func fieldBody(time: TimeInterval) -> some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            ZStack {
+                // Slow-drifting colored wash.
+                LinearGradient(
+                    gradient: Gradient(colors: [washColors[0].opacity(0.92), washColors[1].opacity(0.88)]),
+                    startPoint: UnitPoint(
+                        x: 0.25 + 0.18 * CGFloat(sin(time * 0.05)),
+                        y: 0.1 + 0.1 * CGFloat(cos(time * 0.04))
+                    ),
+                    endPoint: UnitPoint(
+                        x: 0.8 + 0.15 * CGFloat(cos(time * 0.037 + 1.2)),
+                        y: 0.95 + 0.08 * CGFloat(sin(time * 0.045 + 0.6))
+                    )
+                )
+
+                // The water: five pigment blobs on slow Lissajous drift.
+                blob(glowColors[0], time, speed: 0.10, phase: 0.0, size: w * 0.85, at: CGPoint(x: w * 0.24, y: h * 0.30))
+                blob(glowColors[1], time, speed: 0.08, phase: 2.4, size: w * 0.72, at: CGPoint(x: w * 0.78, y: h * 0.70))
+                blob(glowColors[2], time, speed: 0.12, phase: 4.1, size: w * 0.52, at: CGPoint(x: w * 0.66, y: h * 0.24))
+                blob(glowColors[3], time, speed: 0.07, phase: 1.3, size: w * 0.58, at: CGPoint(x: w * 0.30, y: h * 0.86))
+                blob(glowColors[4], time, speed: 0.09, phase: 5.2, size: w * 0.42, at: CGPoint(x: w * 0.5, y: h * 0.5))
+                blob(accentColor, time, speed: 0.06, phase: 3.0, size: w * 0.34, at: CGPoint(x: w * 0.14, y: h * 0.12))
+            }
+        }
+    }
+
+    private func blob(
+        _ color: Color,
+        _ time: TimeInterval,
+        speed: Double,
+        phase: Double,
+        size: CGFloat,
+        at center: CGPoint
+    ) -> some View {
+        let drift = blobDrift(time, speed: speed, phase: phase, radius: size * 0.30)
+        return Circle()
+            .fill(
+                RadialGradient(
+                    colors: [color.opacity(0.46), color.opacity(0.0)],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: size / 2
+                )
+            )
+            .frame(width: size, height: size)
+            .position(x: center.x + drift.width, y: center.y + drift.height)
+    }
+
+    private func blobDrift(_ t: TimeInterval, speed: Double, phase: Double, radius: CGFloat) -> CGSize {
+        CGSize(
+            width: CGFloat(sin(t * speed + phase)) * radius,
+            height: CGFloat(cos(t * speed * 0.83 + phase * 1.6)) * radius * 0.75
+        )
     }
 }
 
 /// Makes the window itself transparent so Liquid Glass can refract the
-/// desktop and the ambient light — no more opaque black window backdrop.
+/// desktop and the fluid background — no more opaque black window backdrop.
 struct TransparentWindowConfigurator: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()

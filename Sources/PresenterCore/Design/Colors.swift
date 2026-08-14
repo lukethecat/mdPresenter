@@ -31,7 +31,7 @@ public extension NSColor {
         return 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent
     }
 
-    var isDark: Bool { luminance < 0.45 }
+    var isDark: Bool { luminance < 0.42 }
 
     /// A readable text color on top of this color.
     var contrastingText: NSColor { isDark ? NSColor.white : NSColor.black }

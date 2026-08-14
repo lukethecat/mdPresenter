@@ -128,6 +128,15 @@ final class AppState: ObservableObject {
         return style
     }
 
+    /// Whether the current slide's pigment is light — the glass scrims
+    /// darken adaptively on light slides (瓷白、琉璃金…) and stay clear
+    /// on dark ones (石青、宫墙红…), keeping chrome text readable.
+    var currentSlideIsLight: Bool {
+        guard let content = currentContent else { return false }
+        let style = slideStyle(for: content)
+        return !(style.background.first?.isDark ?? true)
+    }
+
     func media(for block: Block) -> MediaAttachment? {
         guard let id = block.mediaId else { return nil }
         return media.first { $0.id == id }
