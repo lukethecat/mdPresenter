@@ -42,12 +42,35 @@ public struct Theme: Identifiable {
     // MARK: Registry
 
     public static func all() -> [Theme] {
-        [dunhuang, gugong, qinghua, ru, shuimo, jiangnan, wuxing, chajing, zhuqing]
+        [glass, dunhuang, gugong, qinghua, ru, shuimo, jiangnan, wuxing, chajing, zhuqing]
     }
 
     public static func theme(id: String) -> Theme {
-        all().first { $0.id == id } ?? dunhuang
+        all().first { $0.id == id } ?? glass
     }
+}
+
+// MARK: - 现代玻璃色板
+
+enum GlassPalette {
+    /// Post-WWDC25 system colors (Apple HIG 2025-06-09 refresh), dark appearance.
+    static let blue = NSColor(hex: 0x0091FF)
+    static let indigo = NSColor(hex: 0x6D7CFF)
+    static let teal = NSColor(hex: 0x00D2E0)
+    static let purple = NSColor(hex: 0xDB34F2)
+    static let gray = NSColor(hex: 0x8E8E93)
+    /// Deep ink base sampled from the macOS Tahoe "Chroma Blue" wallpaper.
+    static let ink = NSColor(hex: 0x0A1226)
+
+    /// Liquid-glass slide gradients: deep ink sinking into a system hue.
+    static let gradients: [[NSColor]] = [
+        [NSColor(hex: 0x0A1226), NSColor(hex: 0x0E3A78)], // → systemBlue
+        [NSColor(hex: 0x0E1230), NSColor(hex: 0x3A2F8A)], // → systemIndigo
+        [NSColor(hex: 0x08222C), NSColor(hex: 0x0B5664)], // → systemTeal
+        [NSColor(hex: 0x170B2C), NSColor(hex: 0x5A2078)], // → systemPurple
+        [NSColor(hex: 0x0A1226), NSColor(hex: 0x14213A)], // → ink
+    ]
+    static let accents: [NSColor] = [blue, indigo, teal, purple, gray]
 }
 
 // MARK: - 传统色板
@@ -88,7 +111,30 @@ enum Palette {
 
 public extension Theme {
 
-    /// 敦煌 —— 矿物颜料，壁上千年。默认主题：饱和而内敛的「多巴胺」。
+    /// Glass —— 默认主题：macOS Liquid Glass 语言。深墨沉入系统色，
+    /// 逐页在 systemBlue / systemIndigo / systemTeal / systemPurple 间流转。
+    static let glass = Theme(id: "glass", name: "Glass", tagline: "macOS Liquid Glass",
+                             kind: "现代") { index, total, mode in
+        let bg = GlassPalette.gradients[index % GlassPalette.gradients.count]
+        let accent = GlassPalette.accents[index % GlassPalette.accents.count]
+        let dark = mode == .dark
+        return SlideStyle(
+            background: dark ? bg : bg.reversed().map { $0.mixed(with: .white, t: 0.82) },
+            textColor: dark ? NSColor(hex: 0xF2F4F8) : NSColor(hex: 0x14213A),
+            headlineColor: .white,
+            kickerColor: accent,
+            accent: accent,
+            pageColor: NSColor(hex: 0x8E8E93),
+            headlineFamily: Typography.resolvedFamily("inter"),
+            headlineWeight: .bold,
+            headlineScale: 1.1,
+            uppercaseKicker: true,
+            centerContent: false,
+            useHairlineDivider: false
+        )
+    }
+
+    /// 敦煌 —— 矿物颜料，壁上千年。饱和而内敛的「多巴胺」。
     static let dunhuang = Theme(id: "dunhuang", name: "敦煌 Dunhuang", tagline: "矿物颜料 · 壁上千年",
                                 kind: "画彩") { index, total, mode in
         let base = Palette.dunhuang[index % Palette.dunhuang.count]

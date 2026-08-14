@@ -11,9 +11,15 @@ import AppKit
 
 final class DesignVerificationTests: XCTestCase {
 
-    private func render(themeId: String, slideIndex: Int, size: CGSize = CGSize(width: 800, height: 450)) -> NSBitmapImageRep? {
+    private func render(
+        themeId: String,
+        slideIndex: Int,
+        mode: ColorMode = .light,
+        size: CGSize = CGSize(width: 800, height: 450)
+    ) -> NSBitmapImageRep? {
         let state = AppState()
         state.settings.themeId = themeId
+        state.settings.colorMode = mode
         state.reparse()
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
         guard state.deck.contents.indices.contains(slideIndex) else { return nil }
@@ -122,10 +128,26 @@ final class DesignVerificationTests: XCTestCase {
     func testProgressColorsIndigoToGold() {
         let start = ProgressColorEngine.color(at: 0)
         let end = ProgressColorEngine.color(at: 1)
-        XCTAssertEqual(ProgressColorEngine.stageName(at: 0), "靛青")
-        XCTAssertEqual(ProgressColorEngine.stageName(at: 1), "鎏金")
-        XCTAssertGreaterThan(start.blueComponent, start.redComponent, "cold start is indigo 靛青")
-        XCTAssertGreaterThan(end.redComponent, end.blueComponent, "afterglow is gold 鎏金")
+        XCTAssertEqual(ProgressColorEngine.stageName(at: 0), "Blue")
+        XCTAssertEqual(ProgressColorEngine.stageName(at: 1), "Gold")
+        XCTAssertGreaterThan(start.blueComponent, start.redComponent, "cold start is systemBlue")
+        XCTAssertGreaterThan(end.redComponent, end.blueComponent, "afterglow is systemYellow")
         XCTAssertGreaterThan(end.greenComponent, 0.5)
+    }
+
+    /// The default Glass theme: deep ink sinking into a system hue —
+    /// a premium gradient, not a flat color.
+    func testGlassThemePremiumGradient() throws {
+        guard let rep = render(themeId: "glass", slideIndex: 0, mode: .dark) else {
+            return XCTFail("render failed")
+        }
+        let top = pixel(rep, rep.pixelsWide / 2, 6)!
+        let bottom = pixel(rep, rep.pixelsWide / 2, rep.pixelsHigh - 6)!
+        // Top is deep ink (dark), bottom sinks into systemBlue (blue > red).
+        XCTAssertLessThan(top.r + top.g + top.b, 0.6, "top should be deep ink")
+        XCTAssertGreaterThan(bottom.b, bottom.r, "bottom should flow into a blue system hue")
+        XCTAssertGreaterThan(distance(top, bottom), 0.2, "must be a real gradient")
+        // White headline pixels.
+        XCTAssertGreaterThan(whitePixelCount(rep), 40, "headline should render white")
     }
 }

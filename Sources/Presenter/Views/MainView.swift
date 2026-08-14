@@ -33,8 +33,6 @@ struct MainView: View {
         }
         .background(
             FluidBackground(
-                id: ambientID,
-                pigments: ambientPigments,
                 accent: ProgressColorEngine.color(at: progress)
             )
             .ignoresSafeArea()
@@ -53,19 +51,6 @@ struct MainView: View {
                 state.editorCommand.send(.focusEditor)
             }
         }
-    }
-
-    /// The current slide's own background pigments — the fluid backdrop
-    /// IS the slide's color, flowing from 石青 to 宫墙红 as you move.
-    private var ambientPigments: [NSColor] {
-        guard let content = state.currentContent else {
-            return [NSColor(hex: 0x2E5F88)]
-        }
-        return state.slideStyle(for: content).background
-    }
-
-    private var ambientID: String {
-        "\(state.currentSlide)-\(state.settings.themeId)-\(state.settings.colorMode.rawValue)"
     }
 
     private var editorPane: some View {

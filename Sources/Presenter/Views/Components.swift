@@ -116,38 +116,103 @@ enum LiquidGlassPalette {
     ]
 }
 
+/// Environment interaction: the fluid takes its colors from the DESKTOP
+/// WALLPAPER (the same source the system glass refracts), falling back to
+/// the Tahoe palette when the wallpaper can't be read. This is the macOS
+/// equivalent of Windows Mica/Acrylic desktop sampling — the window's
+/// light literally collides with its environment.
+enum WallpaperPalette {
+    private static var cached: [NSColor]?
+
+    static func sampled() -> [NSColor] {
+        if let cached = cached { return cached }
+        let colors = sampleWallpaper() ?? []
+        cached = colors
+        return colors
+    }
+
+    private static func sampleWallpaper() -> [NSColor]? {
+        guard let screen = NSScreen.main,
+              let url = NSWorkspace.shared.desktopImageURL(for: screen),
+              let image = NSImage(contentsOf: url) else {
+            return nil
+        }
+        // Downsample to a tiny bitmap for cheap dominant-color extraction.
+        let small = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: 48, pixelsHigh: 27,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+            isPlanar: false, colorSpaceName: .deviceRGB,
+            bytesPerRow: 0, bitsPerPixel: 0
+        )!
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: small)
+        image.draw(
+            in: NSRect(x: 0, y: 0, width: 48, height: 27),
+            from: .zero, operation: .copy, fraction: 1
+        )
+        NSGraphicsContext.restoreGraphicsState()
+
+        var buckets: [UInt32: Int] = [:]
+        for y in 0..<small.pixelsHigh {
+            for x in 0..<small.pixelsWide {
+                guard let c = small.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                let r = UInt32(c.redComponent * 15) & 15
+                let g = UInt32(c.greenComponent * 15) & 15
+                let b = UInt32(c.blueComponent * 15) & 15
+                buckets[(r << 8) | (g << 4) | b, default: 0] += 1
+            }
+        }
+
+        var candidates: [(NSColor, Int)] = []
+        for (key, count) in buckets {
+            let r = CGFloat((key >> 8) & 15) / 15.0
+            let g = CGFloat((key >> 4) & 15) / 15.0
+            let b = CGFloat(key & 15) / 15.0
+            let color = NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
+            let (_, saturation, brightness) = color.hsb
+            // Skip near-black / near-white / grey pixels: keep living hues.
+            guard brightness > 0.10, brightness < 0.94, saturation > 0.12 else { continue }
+            candidates.append((color, count))
+        }
+        candidates.sort { $0.1 > $1.1 }
+        let top = Array(candidates.prefix(5)).map { $0.0 }
+        return top.count >= 2 ? top : nil
+    }
+}
+
 /// Fluid glass backdrop, following the researched Liquid Glass guardrails:
 ///   • translucent wash (never opaque — the desktop reads through),
-///   • ≤ 4 compositing layers (wash + 3 water blobs + whisper),
+///   • ≤ 4 compositing layers (wash + water ribbons + progress accent),
 ///   • soft frost (large soft radial gradients, no hard blur),
 ///   • mandatory Reduce-Transparency fallback: solid variant at runtime.
 ///
-/// The water ribbons use macOS Tahoe's own wallpaper pigments; the current
-/// slide's pigment stays as a low whisper so themes still tint the ambience.
+/// The water takes its hues from the desktop wallpaper — the same light the
+/// system glass refracts — so the window flows with its environment.
 struct FluidBackground: View {
-    var id: String = ""
-    var pigments: [NSColor] = [NSColor(hex: 0x2E5F88)]
-    var accent: NSColor = NSColor(hex: 0x1F6FB2)
+    var accent: NSColor = NSColor(hex: 0x0088FF)
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
-    @State private var whisperColor: Color = Color(NSColor(hex: 0x2E5F88))
-    @State private var accentColor: Color = Color(NSColor(hex: 0x1F6FB2))
-    private let waterColors: [Color] = LiquidGlassPalette.water.map { Color($0) }
+    @State private var waterColors: [Color] = LiquidGlassPalette.water.map { Color($0) }
+    @State private var accentColor: Color = Color(NSColor(hex: 0x0088FF))
 
     var body: some View {
         field(time: 0)
-            .onAppear(perform: syncPalette)
-            .onChange(of: id) { _ in
-                withAnimation(.easeInOut(duration: 1.5)) {
-                    syncPalette()
+            .onAppear {
+                accentColor = Color(accent)
+                // Sample the wallpaper off the main thread (6K HEIC decode),
+                // then let the fluid flow into the environment's colors.
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let sampled = WallpaperPalette.sampled()
+                    DispatchQueue.main.async {
+                        if !sampled.isEmpty {
+                            withAnimation(.easeInOut(duration: 1.5)) {
+                                waterColors = sampled.map { Color($0) }
+                            }
+                        }
+                    }
                 }
             }
-    }
-
-    private func syncPalette() {
-        whisperColor = Color(pigments.first ?? NSColor(hex: 0x2E5F88))
-        accentColor = Color(accent)
     }
 
     // MARK: Field
@@ -186,14 +251,14 @@ struct FluidBackground: View {
                 )
 
                 if !reduceTransparency {
-                    // Three water ribbons (Tahoe pigments) on slow drift.
-                    blob(waterColors[0], time, speed: 0.09, phase: 0.0, size: w * 0.78, opacity: 0.30, at: CGPoint(x: w * 0.26, y: h * 0.32))
-                    blob(waterColors[1], time, speed: 0.07, phase: 2.4, size: w * 0.62, opacity: 0.26, at: CGPoint(x: w * 0.76, y: h * 0.68))
-                    blob(waterColors[2], time, speed: 0.11, phase: 4.1, size: w * 0.55, opacity: 0.24, at: CGPoint(x: w * 0.6, y: h * 0.22))
-                    blob(waterColors[3], time, speed: 0.06, phase: 1.3, size: w * 0.5, opacity: 0.20, at: CGPoint(x: w * 0.32, y: h * 0.82))
+                    // Water ribbons carrying the environment's colors.
+                    let n = max(1, waterColors.count)
+                    blob(waterColors[0 % n], time, speed: 0.09, phase: 0.0, size: w * 0.78, opacity: 0.30, at: CGPoint(x: w * 0.26, y: h * 0.32))
+                    blob(waterColors[1 % n], time, speed: 0.07, phase: 2.4, size: w * 0.62, opacity: 0.26, at: CGPoint(x: w * 0.76, y: h * 0.68))
+                    blob(waterColors[2 % n], time, speed: 0.11, phase: 4.1, size: w * 0.55, opacity: 0.24, at: CGPoint(x: w * 0.6, y: h * 0.22))
+                    blob(waterColors[3 % n], time, speed: 0.06, phase: 1.3, size: w * 0.5, opacity: 0.20, at: CGPoint(x: w * 0.32, y: h * 0.82))
 
-                    // The current slide's pigment — a quiet whisper.
-                    blob(whisperColor, time, speed: 0.05, phase: 5.2, size: w * 0.46, opacity: 0.16, at: CGPoint(x: w * 0.5, y: h * 0.5))
+                    // The progress pigment — a slow accent breathing.
                     blob(accentColor, time, speed: 0.06, phase: 3.0, size: w * 0.28, opacity: 0.12, at: CGPoint(x: w * 0.14, y: h * 0.12))
                 }
             }

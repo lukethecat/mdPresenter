@@ -67,7 +67,7 @@ final class AppState: ObservableObject {
 
     init() {
         text = SampleDeck.instantSlides
-        settings.themeId = "dunhuang"
+        settings.themeId = "glass"
         documentTitle = SampleDeck.instantSlidesTitle
 
         $text
@@ -278,7 +278,7 @@ enum SampleDeck {
 
     用 Markdown 写作，Presenter 负责设计。连续按三次回车，或者输入 `---`，就会创建一张新幻灯片。
 
-    正文是演讲备注，标题才会上屏幕。试试把光标往下移动——光标颜色会随着演示进度，从靛青渐渐变成鎏金。
+    正文是演讲备注，标题才会上屏幕。试试把光标往下移动——光标颜色会随着演示进度，从 Blue 渐渐变成 Gold。
 
     ---
 
@@ -290,11 +290,11 @@ enum SampleDeck {
 
     ---
 
-    # 东方美学，自动设计
+    # 自动设计，玻璃质感
 
-    设计引擎会分析内容，自动挑选布局。敦煌主题取矿物颜料，汝窑主题是天青与留白，青花主题是钴蓝白瓷。
+    设计引擎会分析内容，自动挑选布局。默认的 Glass 主题用深墨与系统色渐变，逐页在 Blue、Indigo、Teal、Purple 间流转。
 
-    在右侧 Inspector 的 Design 标签里切换主题、明暗模式与画面比例。
+    窗口背景的流体会采样你桌面壁纸的颜色——应用与它的环境同呼吸。在右侧 Inspector 的 Design 标签里可以切换主题、明暗模式与画面比例。
 
     ---
 

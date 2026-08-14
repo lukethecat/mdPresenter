@@ -315,11 +315,11 @@ struct PresenterView: View {
 
     private func stageName(_ raw: String) -> String {
         switch raw {
-        case "靛青": return "靛青 · 冷启动"
-        case "黛紫": return "黛紫 · 预热"
-        case "朱砂": return "朱砂 · 高潮"
-        case "琥珀": return "琥珀 · 收尾"
-        case "鎏金": return "鎏金 · 余韵"
+        case "Blue": return "Blue · 冷启动"
+        case "Indigo": return "Indigo · 预热"
+        case "Red": return "Red · 高潮"
+        case "Orange": return "Orange · 收尾"
+        case "Gold": return "Gold · 余韵"
         default: return raw
         }
     }
@@ -393,18 +393,17 @@ final class PresenterWindowController {
             window.orderFrontRegardless()
         }
 
-        // Go fullscreen on the next runloop tick; if the system refuses,
-        // fall back to covering the whole screen with the borderless frame.
+        // Deterministic fullscreen: cover the whole target screen INCLUDING
+        // menu bar and Dock (kiosk level), since toggleFullScreen is
+        // unreliable for borderless windows on macOS 26/27.
         DispatchQueue.main.async { [weak self, weak state] in
             guard let window = self?.window, let state = state,
-                  state.isPresenting, !window.styleMask.contains(.fullScreen) else { return }
-            window.toggleFullScreen(nil)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self, weak state] in
-                guard let window = self?.window, let state = state,
-                      state.isPresenting, !window.styleMask.contains(.fullScreen),
-                      let screen = window.screen ?? NSScreen.main else { return }
+                  state.isPresenting else { return }
+            let screen = window.screen ?? NSScreen.main
+            if let screen = screen {
                 window.setFrame(screen.frame, display: true)
             }
+            window.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
         }
     }
 

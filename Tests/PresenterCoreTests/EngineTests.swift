@@ -45,9 +45,9 @@ final class ProgressColorTests: XCTestCase {
         let start = ProgressColorEngine.color(at: 0)
         let end = ProgressColorEngine.color(at: 1)
         XCTAssertGreaterThan(start.hexString.lowercased().dropFirst().first.map { _ in 0 } ?? 0, -1)
-        // 靛青 start, 鎏金 end.
-        XCTAssertEqual(ProgressColorEngine.stageName(at: 0), "靛青")
-        XCTAssertEqual(ProgressColorEngine.stageName(at: 1), "鎏金")
+        // systemBlue start, systemYellow end.
+        XCTAssertEqual(ProgressColorEngine.stageName(at: 0), "Blue")
+        XCTAssertEqual(ProgressColorEngine.stageName(at: 1), "Gold")
         let (hStart, _, _) = start.hsb
         let (hEnd, _, _) = end.hsb
         XCTAssertLessThan(abs(hStart - 0.58), 0.25) // bluish hue
