@@ -70,7 +70,22 @@ enum GlassPalette {
         [NSColor(hex: 0x170B2C), NSColor(hex: 0x5A2078)], // → systemPurple
         [NSColor(hex: 0x0A1226), NSColor(hex: 0x14213A)], // → ink
     ]
+
+    /// Light-mode gradients: airy pastels carrying REAL system hues —
+    /// sampled from the macOS "Mac Blue / Mac Purple" light wallpapers,
+    /// never washed-out grey.
+    static let gradientsLight: [[NSColor]] = [
+        [NSColor(hex: 0xE4F0FC), NSColor(hex: 0x9CC9F2)], // periwinkle → systemBlue
+        [NSColor(hex: 0xEDEBFB), NSColor(hex: 0xAFA9F2)], // lavender → systemIndigo
+        [NSColor(hex: 0xE4F6F7), NSColor(hex: 0x93DFE6)], // ice → systemTeal
+        [NSColor(hex: 0xF6E8FA), NSColor(hex: 0xD9A3EF)], // orchid → systemPurple
+        [NSColor(hex: 0xEEF1F5), NSColor(hex: 0xC4CDDA)], // silver ink
+    ]
     static let accents: [NSColor] = [blue, indigo, teal, purple, gray]
+
+    /// Light-mode ink: deep slate for headline/text contrast on pastels.
+    static let inkLight = NSColor(hex: 0x14213A)
+    static let pageLight = NSColor(hex: 0x5F6B7A)
 }
 
 // MARK: - 传统色板
@@ -115,16 +130,20 @@ public extension Theme {
     /// 逐页在 systemBlue / systemIndigo / systemTeal / systemPurple 间流转。
     static let glass = Theme(id: "glass", name: "Glass", tagline: "macOS Liquid Glass",
                              kind: "现代") { index, total, mode in
-        let bg = GlassPalette.gradients[index % GlassPalette.gradients.count]
         let accent = GlassPalette.accents[index % GlassPalette.accents.count]
         let dark = mode == .dark
+        // Light mode keeps REAL hue: airy pastel gradients (Mac Blue /
+        // Mac Purple light wallpapers), not desaturated grey.
+        let bg = dark
+            ? GlassPalette.gradients[index % GlassPalette.gradients.count]
+            : GlassPalette.gradientsLight[index % GlassPalette.gradientsLight.count]
         return SlideStyle(
-            background: dark ? bg : bg.reversed().map { $0.mixed(with: .white, t: 0.82) },
-            textColor: dark ? NSColor(hex: 0xF2F4F8) : NSColor(hex: 0x14213A),
-            headlineColor: .white,
+            background: bg,
+            textColor: dark ? NSColor(hex: 0xF2F4F8) : GlassPalette.inkLight,
+            headlineColor: dark ? .white : GlassPalette.inkLight,
             kickerColor: accent,
             accent: accent,
-            pageColor: NSColor(hex: 0x8E8E93),
+            pageColor: dark ? NSColor(hex: 0x8E8E93) : GlassPalette.pageLight,
             headlineFamily: Typography.resolvedFamily("inter"),
             headlineWeight: .bold,
             headlineScale: 1.1,

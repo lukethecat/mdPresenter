@@ -150,4 +150,19 @@ final class DesignVerificationTests: XCTestCase {
         // White headline pixels.
         XCTAssertGreaterThan(whitePixelCount(rep), 40, "headline should render white")
     }
+
+    /// Glass light mode must carry REAL hue — airy periwinkle pastels,
+    /// not washed-out grey ("light 颜色全是灰色" regression test).
+    func testGlassThemeLightModeIsColorful() throws {
+        guard let rep = render(themeId: "glass", slideIndex: 0, mode: .light) else {
+            return XCTFail("render failed")
+        }
+        let top = pixel(rep, rep.pixelsWide / 2, 6)!
+        let bottom = pixel(rep, rep.pixelsWide / 2, rep.pixelsHigh - 6)!
+        // Bright but with a clear blue bias: blue clearly beats red.
+        XCTAssertGreaterThan(top.r + top.g + top.b, 2.2, "light mode should be airy and bright")
+        XCTAssertGreaterThan(top.b - top.r, 0.05, "periwinkle should be blue, not grey")
+        XCTAssertGreaterThan(bottom.b - bottom.r, 0.12, "systemBlue end should stay vivid")
+        XCTAssertGreaterThan(distance(top, bottom), 0.25, "must be a real pastel gradient")
+    }
 }
