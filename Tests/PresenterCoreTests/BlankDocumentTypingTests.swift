@@ -167,4 +167,48 @@ final class BlankDocumentTypingTests: XCTestCase {
             }
         }
     }
+
+    /// 回归：输入法组合（marked text）期间样式引擎必须停手——
+    /// 在组合文本上反复增删临时属性会与 IME 的组合光标查询互相
+    /// 触发，造成死循环（用户报告的「未响应」场景）。
+    func testIMEMarkedTextCompositionIsSafe() throws {
+        let state = AppState()
+        state.newDocument(blank: true)
+        let (_, textView) = makeHost(state: state)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+
+        // 模拟输入法组合：setMarkedText + textDidChange。
+        textView.setMarkedText(
+            "拼", selectedRange: NSRange(location: 0, length: 1),
+            replacementRange: NSRange(location: 0, length: 0)
+        )
+        XCTAssertTrue(textView.hasMarkedText())
+        textView.delegate?.textDidChange?(
+            Notification(name: NSText.didChangeNotification, object: textView)
+        )
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        XCTAssertEqual(state.text, "拼")
+
+        // 组合期间多次逐键触发，样式被跳过，不得崩溃/挂起。
+        for _ in 0..<20 {
+            textView.setMarkedText(
+                "拼音", selectedRange: NSRange(location: 0, length: 2),
+                replacementRange: NSRange(location: 0, length: 1)
+            )
+            textView.delegate?.textDidChange?(
+                Notification(name: NSText.didChangeNotification, object: textView)
+            )
+        }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+
+        // 提交组合后的最终 textDidChange 补做样式与解析。
+        textView.unmarkText()
+        textView.string = "拼音"
+        textView.delegate?.textDidChange?(
+            Notification(name: NSText.didChangeNotification, object: textView)
+        )
+        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+        XCTAssertEqual(state.deck.slides.count, 1)
+        XCTAssertTrue(state.deck.contents[0].notesPlain.contains("拼音"))
+    }
 }

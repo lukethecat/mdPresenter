@@ -249,9 +249,12 @@ struct EditorView: NSViewRepresentable {
                 .removeDuplicates()
                 .receive(on: RunLoop.main)
                 .sink { [weak self] _ in
-                    self?.applyStyles()
-                    self?.updateGutter()
-                    self?.textView?.needsDisplay = true
+                    guard let self = self else { return }
+                    // IME 组合期间跳过属性重排（同 textDidChange 的防护）。
+                    if self.textView?.hasMarkedText() == true { return }
+                    self.applyStyles()
+                    self.updateGutter()
+                    self.textView?.needsDisplay = true
                 }
                 .store(in: &cancellables)
 
@@ -318,6 +321,11 @@ struct EditorView: NSViewRepresentable {
             guard let tv = notification.object as? MarkdownTextView else { return }
             state.text = tv.string
             updateInsertionColor(tv)
+            // 输入法组合期间（marked text）不改动任何布局属性：
+            // 在组合文本上反复 add/remove temporary attributes 会与
+            // IME 的组合光标查询互相触发，造成死循环（未响应）。
+            // 组合提交后的下一次 textDidChange 会补做样式。
+            guard !tv.hasMarkedText() else { return }
             applyStyles()
             updateGutter()
             tv.needsDisplay = true
@@ -354,6 +362,14 @@ struct EditorView: NSViewRepresentable {
             lm.removeTemporaryAttribute(.backgroundColor, forCharacterRange: full)
             lm.removeTemporaryAttribute(.obliqueness, forCharacterRange: full)
             guard ns.length > 0 else { return }
+            // 超大文本（如巨型粘贴）跳过逐行正则着色，只保留段落级样式
+            // 需求被解析管线承担——避免打字路径上出现卡顿。
+            if ns.length > 300_000 {
+                lm.addTemporaryAttribute(
+                    .foregroundColor, value: EditorChrome.text, forCharacterRange: full
+                )
+                return
+            }
 
             let slides = SlideSplitter.split(ns as String)
             let currentIdx = state.currentSlide
