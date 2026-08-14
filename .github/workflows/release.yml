@@ -7,9 +7,15 @@ on:
 permissions:
   contents: write
 
+# 发布任务不取消（避免并发标签互相打断）。
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   package:
     name: Universal .app + DMG
+    timeout-minutes: 45
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4

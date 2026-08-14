@@ -5,9 +5,15 @@ on:
     branches: [main]
   pull_request:
 
+# 新 push 自动取消本分支尚未完成的旧 run，避免排队堆积。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
     name: Build & Test (${{ matrix.label }})
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
