@@ -541,6 +541,10 @@ struct NotesTextView: View {
                     if case .text(let s) = kid { inner = inner + Text(s) }
                 }
                 result = result + inner.underline().foregroundColor(dimColor)
+            case .superscript(let s):
+                result = result + Text(s).foregroundColor(dimColor)
+            case .subscript(let s):
+                result = result + Text(s).foregroundColor(dimColor)
             case .lineBreak:
                 result = result + Text("\n")
             }

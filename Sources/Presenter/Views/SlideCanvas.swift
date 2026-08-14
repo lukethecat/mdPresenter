@@ -40,6 +40,14 @@ struct InlineTextView: View {
                 result = result + Text(s)
                     .font(.system(size: baseSize * 0.86, weight: .regular, design: .monospaced))
                     .foregroundColor(accent ?? color)
+            case .superscript(let s):
+                result = result + Text(s)
+                    .font(.system(size: baseSize * 0.72, weight: .medium))
+                    .baselineOffset(baseSize * 0.32)
+            case .subscript(let s):
+                result = result + Text(s)
+                    .font(.system(size: baseSize * 0.72, weight: .medium))
+                    .baselineOffset(-baseSize * 0.16)
             case .link(let kids, _):
                 let inner = build(kids, parentBold: parentBold)
                 result = result + inner.underline()

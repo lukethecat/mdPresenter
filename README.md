@@ -7,7 +7,7 @@
 ![MIT](https://img.shields.io/badge/license-MIT-blue)
 ![macOS](https://img.shields.io/badge/macOS-11%2B%20(Intel%20%26%20Apple%20Silicon)-8E8E93)
 ![Swift](https://img.shields.io/badge/Swift-5.9-FA7343)
-![Tests](https://img.shields.io/badge/tests-56%2F56%20passing-30D158)
+![Tests](https://img.shields.io/badge/tests-71%2F71%20passing-30D158)
 ![Built with DeepSeek](https://img.shields.io/badge/vibe%20coded%20with-DeepSeek%20Harness-4D6BFE)
 
 > 💙 **这个项目是「vibe」出来的**：全部代码由人类提出需求、在 [DeepSeek Harness](https://github.com/deepseek-ai) 上由 **deepseek-v4-pro** 逐行协作完成——从 Markdown 解析引擎、Liquid Glass 渲染、到 CI 流水线。人类负责品味与验收，DeepSeek 负责实现。详细记录见 [项目数据](#-项目数据)。
@@ -44,6 +44,31 @@ mdPresenter **能直接打开 iA Presenter 的文件**，也能把文稿导出�
 - **导出为 `.iapresenter` 包**：`text.md` + `info.json`（version 2）+ `assets/`，可被 iA Presenter 直接打开，往返无损。
 - 也支持导入/导出纯 `.md`（TurboStart 自动拆分）、我们的 JSON `.presenter` 格式、PDF 讲义、幻灯片 PDF、PNG 图集。
 
+## Markdown 格式兼容（对照 ia.net/presenter/support/basics/markdown）
+
+| iA 语法 | 支持 | 说明 |
+|---|---|---|
+| 段落 / 硬换行（行尾 `\` 或两个空格） | ✅ | 无标记的行自动流入同一段落 |
+| 标题 `#`–`######` | ✅ | |
+| 无序/有序列表（`- + *` / `1.`） | ✅ | 混用标记亦可 |
+| **任务列表** `- [ ]` / `- [x]` | ✅ | 渲染为 ☐ / ☑ |
+| 嵌套列表 | ⚠️ | 展平渲染（缩进被规范化） |
+| 引用 `>`（Tab 前缀 = 可见） | ✅ | |
+| **定义列表** `⇥术语` + `⇥: 定义` | ✅ | 渲染为可见文本 |
+| 分页 `---` | ✅ | 亦支持三次回车 |
+| 粗体 `**`/`__`、斜体 `*`/`_` | ✅ | |
+| 删除线 `~~…~~`、高亮 `==…==` | ✅ | 分别渲染为斜体/粗体 |
+| **上标** `100m^2` / `y^(a+b)^`、**下标** `x~z` / `x~y,z~` | ✅ | 基线偏移渲染 |
+| 行内链接 / **参考式链接** `[t][id]` `[id]:` | ✅ | 定义行自动隐藏 |
+| **脚注** `[^text]` / `[^id]:` | ✅ | 行内渲染为 †，定义聚合到备注末尾 |
+| `// 注释` | ✅ | 仅演讲者可见（进入备注） |
+| 图片 `![alt](ref)` / 裸 URL / 本地路径 | ✅ | 含查询串 URL |
+| **HTML 图片标签** `<img src="…">` | ✅ | |
+| 图片元数据 `x:` `y:` `size:` `title:` … | ✅ | 归属图片，不泄漏到备注 |
+| 表格（对齐提示、**单元格合并** `\|\|`、行内样式） | ✅ | iA 式极简渲染 |
+| 围栏代码块 ``` | ✅ | 缩进代码块不支持（与 iA 一致） |
+| **数学** `$…$` `$$…$$` `\(…\)` `\[…\]` | ⚠️ | 行内渲染为代码样式、独立公式为代码块；未集成 KaTeX 排版 |
+
 ## 功能清单
 
 - **写作即演讲**：三次回车或 `---` 分页；正文 = 演讲备注（观众不可见），标题 = 幻灯片内容，行首 Tab 强制上屏；Focus Mode（⌘D）；TurboStart 粘贴智能拆分。
@@ -55,7 +80,7 @@ mdPresenter **能直接打开 iA Presenter 的文件**，也能把文稿导出�
 
 ```bash
 swift run Presenter                       # 运行
-swift test                                # 56 个测试
+swift test                                # 71 个测试
 ./scripts/make-app.sh                     # 本机架构 .app
 UNIVERSAL=1 ./scripts/make-app.sh         # Intel + Apple Silicon 通用 .app
 ```
@@ -85,7 +110,7 @@ Sources/
 |---|---|
 | 首次提交 → 发布 | 同一天（2026-08-14），**9+ 个提交全部由人机对话驱动** |
 | Swift 文件 / 总行数 | 34 个 / **6,976 行**（引擎 2,245 + 应用 3,933 + 测试 798） |
-| 测试 | **56/56 通过**（含像素级设计断言、演讲窗口全屏/退出回归、iA 兼容往返） |
+| 测试 | **71/71 通过**（含像素级设计断言、演讲窗口全屏/退出回归、iA 兼容往返） |
 | 主题 | 10 套（1 现代 Glass + 9 东方传统），各带明暗两版 |
 | 二进制 | 通用架构（arm64 + x86_64）**5.1 MB**，零第三方依赖 |
 | 设计调研 | Apple HIG 令牌（hig-mcp）、Tahoe 壁纸**本机实测采样**、48×27 壁纸降采样取色 |

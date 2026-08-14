@@ -12,7 +12,36 @@ public struct MarkdownParser {
     public static func parseBlocks(_ source: String) -> [Block] {
         let text = source.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
-        let lines = text.components(separatedBy: "\n")
+
+        // Pre-pass: collect reference-link and footnote DEFINITIONS and
+        // remove them from the text — they are metadata, never notes.
+        var linkDefs: [String: String] = [:]
+        var footnoteDefs: [String] = []
+        let lines = text.components(separatedBy: "\n").filter { line in
+            let t = line.trimmingCharacters(in: .whitespaces)
+            if let def = footnoteDefinition(t) {
+                footnoteDefs.append(def)
+                return false
+            }
+            if let def = linkDefinition(t) {
+                linkDefs[def.0] = def.1
+                return false
+            }
+            return true
+        }
+
+        var blocks = parseBlockLines(lines, links: linkDefs)
+
+        // Footnotes are grouped at the end of the slide and land in notes.
+        if !footnoteDefs.isEmpty {
+            var foot = Block(kind: .bulletList)
+            foot.lines = footnoteDefs.enumerated().map { "\($0.offset + 1). \($0.element)" }
+            blocks.append(foot)
+        }
+        return blocks
+    }
+
+    private static func parseBlockLines(_ lines: [String], links: [String: String]) -> [Block] {
         var blocks: [Block] = []
         var i = 0
 
@@ -21,6 +50,13 @@ public struct MarkdownParser {
             let line = raw.trimmingCharacters(in: .whitespaces)
 
             if line.isEmpty { i += 1; continue }
+
+            // Display math $$…$$ or \[…\] — rendered as a math code block.
+            if let math = parseDisplayMath(line) {
+                blocks.append(math)
+                i += 1
+                continue
+            }
 
             // Fenced code
             if line.hasPrefix("```") || line.hasPrefix("~~~") {
@@ -42,7 +78,7 @@ public struct MarkdownParser {
             }
 
             // ATX heading
-            if let heading = parseHeading(line) {
+            if let heading = parseHeading(line, links: links) {
                 blocks.append(heading)
                 i += 1
                 continue
@@ -69,8 +105,9 @@ public struct MarkdownParser {
                 continue
             }
 
-            // Blockquote
+            // Blockquote (iA: a leading tab makes the quote visible)
             if line.hasPrefix(">") {
+                let tabbed = raw.hasPrefix("\t")
                 var quoteLines: [String] = []
                 while i < lines.count {
                     let l = lines[i]
@@ -82,8 +119,9 @@ public struct MarkdownParser {
                 }
                 var block = Block(kind: .quote)
                 block.lines = quoteLines
+                block.isTabbedOnSlide = tabbed
                 block.inlines = quoteLines
-                    .map { parseInline($0) }
+                    .map { parseInline($0, links: links) }
                     .reduce(into: []) { partial, inl in
                         if !partial.isEmpty { partial.append(.lineBreak) }
                         partial.append(contentsOf: inl)
@@ -99,7 +137,7 @@ public struct MarkdownParser {
                 while i < lines.count {
                     let t = lines[i].trimmingCharacters(in: .whitespaces)
                     guard t.hasPrefix("- ") || t.hasPrefix("* ") || t.hasPrefix("+ ") else { break }
-                    items.append(String(t.dropFirst(2)))
+                    items.append(taskListItem(String(t.dropFirst(2))))
                     i += 1
                 }
                 var block = Block(kind: .bulletList)
@@ -117,9 +155,9 @@ public struct MarkdownParser {
                     let t = lines[i].trimmingCharacters(in: .whitespaces)
                     guard isOrderedListItem(t) else { break }
                     if let idx = t.firstIndex(of: ".") {
-                        items.append(String(t[t.index(after: idx)...]).trimmingCharacters(in: .whitespaces))
+                        items.append(taskListItem(String(t[t.index(after: idx)...]).trimmingCharacters(in: .whitespaces)))
                     } else {
-                        items.append(t)
+                        items.append(taskListItem(t))
                     }
                     i += 1
                 }
@@ -143,6 +181,13 @@ public struct MarkdownParser {
                 var block = media
                 block.metadata = consumeImageMetadata(lines: lines, from: &i)
                 blocks.append(block)
+                continue
+            }
+
+            // HTML image tag: <img src="…">
+            if let htmlImage = parseHTMLImage(line) {
+                blocks.append(htmlImage)
+                i += 1
                 continue
             }
 
@@ -172,9 +217,21 @@ public struct MarkdownParser {
             block.isTabbedOnSlide = tabbed
             var inlines: [Inline] = []
             for (n, pl) in paraLines.enumerated() {
-                let content = n == 0 && tabbed && pl.hasPrefix("\t") ? String(pl.dropFirst()) : pl
-                if n > 0 { inlines.append(.lineBreak) }
-                inlines.append(contentsOf: parseInline(content))
+                var content = (n == 0 && tabbed && pl.hasPrefix("\t")) ? String(pl.dropFirst()) : pl
+                // iA: a backslash or two trailing spaces on the PREVIOUS line
+                // force a hard break; otherwise lines flow into one paragraph.
+                if n > 0 {
+                    let prev = paraLines[n - 1]
+                    if prev.hasSuffix("\\") || prev.hasSuffix("  ") {
+                        inlines.append(.lineBreak)
+                    } else {
+                        inlines.append(.text(" "))
+                    }
+                }
+                if content.hasSuffix("\\") { content = String(content.dropLast()) }
+                // iA definition lists: "⇥: definition" renders as visible text.
+                if content.hasPrefix(": ") { content = String(content.dropFirst(2)) }
+                inlines.append(contentsOf: parseInline(content, links: links))
             }
             block.inlines = inlines
             blocks.append(block)
@@ -240,7 +297,7 @@ public struct MarkdownParser {
         return metadata
     }
 
-    static func parseHeading(_ line: String) -> Block? {
+    static func parseHeading(_ line: String, links: [String: String] = [:]) -> Block? {
         var level = 0
         for ch in line {
             if ch == "#" { level += 1 } else { break }
@@ -250,8 +307,70 @@ public struct MarkdownParser {
         guard rest.isEmpty || rest.hasPrefix(" ") || rest.hasPrefix("\t") else { return nil }
         var block = Block(kind: .heading)
         block.level = level
-        block.inlines = parseInline(String(rest).trimmingCharacters(in: .whitespaces))
+        block.inlines = parseInline(String(rest).trimmingCharacters(in: .whitespaces), links: links)
         return block
+    }
+
+    /// iA display math: `$$…$$` or `\[…\]` on its own line(s).
+    static func parseDisplayMath(_ line: String) -> Block? {
+        if line.hasPrefix("$$"), line.hasSuffix("$$"), line.count >= 4 {
+            var block = Block(kind: .fencedCode)
+            block.language = "math"
+            block.lines = [String(line.dropFirst(2).dropLast(2))]
+            return block
+        }
+        if line.hasPrefix("\\["), line.hasSuffix("\\]"), line.count >= 4 {
+            var block = Block(kind: .fencedCode)
+            block.language = "math"
+            block.lines = [String(line.dropFirst(2).dropLast(2))]
+            return block
+        }
+        return nil
+    }
+
+    /// Reference link definition: `[id]: https://…`
+    static func linkDefinition(_ line: String) -> (String, String)? {
+        guard line.hasPrefix("["), !line.hasPrefix("[^") else { return nil }
+        guard let close = line.firstIndex(of: "]") else { return nil }
+        let rest = line[line.index(after: close)...]
+        guard rest.hasPrefix(":") else { return nil }
+        let id = String(line[line.index(after: line.startIndex)..<close]).trimmingCharacters(in: .whitespaces)
+        let url = String(rest.dropFirst()).trimmingCharacters(in: .whitespaces)
+        guard !id.isEmpty, !url.isEmpty else { return nil }
+        return (id, url)
+    }
+
+    /// Footnote definition: `[^id]: text`
+    static func footnoteDefinition(_ line: String) -> String? {
+        guard line.hasPrefix("[^") else { return nil }
+        guard let close = line.firstIndex(of: "]") else { return nil }
+        let rest = line[line.index(after: close)...]
+        guard rest.hasPrefix(":") else { return nil }
+        let text = String(rest.dropFirst()).trimmingCharacters(in: .whitespaces)
+        return text.isEmpty ? nil : text
+    }
+
+    /// HTML image tag: `<img src="…">`
+    static func parseHTMLImage(_ line: String) -> Block? {
+        guard line.lowercased().hasPrefix("<img") else { return nil }
+        guard let srcRange = line.range(
+            of: #"src="[^"]+""#,
+            options: [.regularExpression, .caseInsensitive]
+        ) else { return nil }
+        var src = String(line[srcRange])
+        src = String(src.dropFirst(5).dropLast()) // strip src=" and "
+        guard !src.isEmpty else { return nil }
+        var block = Block(kind: .image)
+        block.mediaRef = src
+        block.alt = (src as NSString).lastPathComponent
+        return block
+    }
+
+    /// iA task lists: `- [ ]` → "☐", `- [x]` → "☑".
+    static func taskListItem(_ item: String) -> String {
+        if item.hasPrefix("[ ] ") { return "☐ " + String(item.dropFirst(4)) }
+        if item.hasPrefix("[x] ") { return "☑ " + String(item.dropFirst(4)) }
+        return item
     }
 
     static func isOrderedListItem(_ line: String) -> Bool {
@@ -280,7 +399,13 @@ public struct MarkdownParser {
         var t = line.trimmingCharacters(in: .whitespaces)
         if t.hasPrefix("|") { t.removeFirst() }
         if t.hasSuffix("|") { t.removeLast() }
-        return t.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+        var cells = t.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+        // iA cell merging: a trailing `|` (e.g. `| Gift | 0$ ||`) merges
+        // into the previous cell — collapse trailing empties.
+        while cells.count > 1, cells.last?.isEmpty == true {
+            cells.removeLast()
+        }
+        return cells
     }
 
     /// Column alignments from the separator row (`|:---|`, `|---:|`, `|:---:|`).
@@ -314,7 +439,7 @@ public struct MarkdownParser {
 
     // MARK: - Inline parser
 
-    public static func parseInline(_ input: String) -> [Inline] {
+    public static func parseInline(_ input: String, links: [String: String] = [:]) -> [Inline] {
         var result: [Inline] = []
         var i = input.startIndex
         var buffer = ""
@@ -368,11 +493,123 @@ public struct MarkdownParser {
                     continue
                 }
             }
+            // iA inline math $…$ (no space inside) → code-styled text.
+            if ch == "$" {
+                let next = input.index(after: i)
+                if next < input.endIndex, input[next] != " ", input[next] != "$" {
+                    var j = next
+                    var content = ""
+                    while j < input.endIndex, input[j] != "$" {
+                        content.append(input[j])
+                        j = input.index(after: j)
+                    }
+                    if j < input.endIndex, !content.isEmpty {
+                        flushBuffer()
+                        result.append(.code(content))
+                        i = input.index(after: j)
+                        continue
+                    }
+                }
+            }
+            // iA superscript: 100m^2 or y^(a+b)^
+            if ch == "^" {
+                let next = input.index(after: i)
+                if next < input.endIndex {
+                    if input[next] == "(" {
+                        var j = input.index(after: next)
+                        var content = ""
+                        while j < input.endIndex, input[j] != ")" {
+                            content.append(input[j])
+                            j = input.index(after: j)
+                        }
+                        if j < input.endIndex, !content.isEmpty {
+                            flushBuffer()
+                            result.append(.superscript(content))
+                            i = input.index(after: j)
+                            continue
+                        }
+                    } else {
+                        var j = next
+                        var content = ""
+                        while j < input.endIndex, input[j].isLetter || input[j].isNumber {
+                            content.append(input[j])
+                            j = input.index(after: j)
+                        }
+                        if !content.isEmpty {
+                            flushBuffer()
+                            result.append(.superscript(content))
+                            i = j
+                            continue
+                        }
+                    }
+                }
+            }
+            // iA subscript: x~z or x~y,z~ (single tilde; ~~ is strikethrough)
+            if ch == "~" {
+                let next = input.index(after: i)
+                if next < input.endIndex, input[next] != "~", input[next] != " " {
+                    var j = next
+                    var content = ""
+                    var found = false
+                    // delimited form first: no whitespace inside
+                    while j < input.endIndex {
+                        if input[j] == "~" {
+                            found = true
+                            break
+                        }
+                        if input[j].isWhitespace { break }
+                        content.append(input[j])
+                        j = input.index(after: j)
+                    }
+                    if found, !content.isEmpty {
+                        flushBuffer()
+                        result.append(.subscript(content))
+                        i = input.index(after: j)
+                        continue
+                    }
+                    // bare run form: x~z
+                    j = next
+                    content = ""
+                    while j < input.endIndex, input[j].isLetter || input[j].isNumber {
+                        content.append(input[j])
+                        j = input.index(after: j)
+                    }
+                    if !content.isEmpty {
+                        flushBuffer()
+                        result.append(.subscript(content))
+                        i = j
+                        continue
+                    }
+                }
+            }
             if ch == "[" {
+                // iA inline footnote [^text]
+                let next = input.index(after: i)
+                if next < input.endIndex, input[next] == "^" {
+                    var j = input.index(after: next)
+                    var content = ""
+                    while j < input.endIndex, input[j] != "]" {
+                        content.append(input[j])
+                        j = input.index(after: j)
+                    }
+                    if j < input.endIndex {
+                        flushBuffer()
+                        result.append(.superscript("†"))
+                        i = input.index(after: j)
+                        continue
+                    }
+                }
                 if let link = parseLink(from: input, start: i) {
                     flushBuffer()
-                    result.append(.link(text: parseInline(link.0), url: link.1))
+                    result.append(.link(text: parseInline(link.0, links: links), url: link.1))
                     i = link.2
+                    continue
+                }
+                // iA reference link [text][id] / [text][]
+                if let ref = parseReferenceLink(from: input, start: i, links: links) {
+                    flushBuffer()
+                    result.append(.link(text: parseInline(ref.0, links: links), url: ref.1))
+                    i = ref.2
                     continue
                 }
             }
@@ -382,7 +619,7 @@ public struct MarkdownParser {
                 if next < input.endIndex, input[next] == "~" {
                     if let strike = parseEmphasis(from: input, start: i, marker: "~~") {
                         flushBuffer()
-                        result.append(.italic(parseInline(strike.0)))
+                        result.append(.italic(parseInline(strike.0, links: links)))
                         i = strike.1
                         continue
                     }
@@ -394,7 +631,7 @@ public struct MarkdownParser {
                 if next < input.endIndex, input[next] == "=" {
                     if let highlight = parseEmphasis(from: input, start: i, marker: "==") {
                         flushBuffer()
-                        result.append(.bold(parseInline(highlight.0)))
+                        result.append(.bold(parseInline(highlight.0, links: links)))
                         i = highlight.1
                         continue
                     }
@@ -405,13 +642,13 @@ public struct MarkdownParser {
                 if next < input.endIndex, input[next] == "*" {
                     if let bold = parseEmphasis(from: input, start: i, marker: "**") {
                         flushBuffer()
-                        result.append(.bold(parseInline(bold.0)))
+                        result.append(.bold(parseInline(bold.0, links: links)))
                         i = bold.1
                         continue
                     }
                 } else if let italic = parseEmphasis(from: input, start: i, marker: "*") {
                     flushBuffer()
-                    result.append(.italic(parseInline(italic.0)))
+                    result.append(.italic(parseInline(italic.0, links: links)))
                     i = italic.1
                     continue
                 }
@@ -421,13 +658,13 @@ public struct MarkdownParser {
                 if next < input.endIndex, input[next] == "_" {
                     if let bold = parseEmphasis(from: input, start: i, marker: "__") {
                         flushBuffer()
-                        result.append(.bold(parseInline(bold.0)))
+                        result.append(.bold(parseInline(bold.0, links: links)))
                         i = bold.1
                         continue
                     }
                 } else if let italic = parseEmphasis(from: input, start: i, marker: "_") {
                     flushBuffer()
-                    result.append(.italic(parseInline(italic.0)))
+                    result.append(.italic(parseInline(italic.0, links: links)))
                     i = italic.1
                     continue
                 }
@@ -491,6 +728,43 @@ public struct MarkdownParser {
                         url.append(input[j])
                         j = input.index(after: j)
                     }
+                }
+                return nil
+            }
+            text.append(input[i])
+            i = input.index(after: i)
+        }
+        return nil
+    }
+
+    /// iA reference link: [text][id] or [text][] (id falls back to the text).
+    static func parseReferenceLink(
+        from input: String, start: String.Index, links: [String: String]
+    ) -> (String, String, String.Index)? {
+        var i = input.index(after: start)
+        var text = ""
+        while i < input.endIndex {
+            if input[i] == "\\" {
+                let next = input.index(after: i)
+                if next < input.endIndex {
+                    text.append(input[next])
+                    i = input.index(after: next)
+                    continue
+                }
+            }
+            if input[i] == "]" {
+                let after = input.index(after: i)
+                guard after < input.endIndex, input[after] == "[" else { return nil }
+                var j = input.index(after: after)
+                var id = ""
+                while j < input.endIndex {
+                    if input[j] == "]" {
+                        let key = id.isEmpty ? text : id
+                        guard let url = links[key] else { return nil }
+                        return (text, url, input.index(after: j))
+                    }
+                    id.append(input[j])
+                    j = input.index(after: j)
                 }
                 return nil
             }

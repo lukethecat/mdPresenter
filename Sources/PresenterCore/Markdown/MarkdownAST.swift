@@ -9,6 +9,8 @@ public enum Inline: Equatable {
     case code(String)
     case link(text: [Inline], url: String)
     case lineBreak
+    case superscript(String)   // iA: 100m^2 / y^(a+b)^
+    case `subscript`(String)   // iA: x~z / x~y,z~
 
     public var plainText: String {
         switch self {
@@ -18,6 +20,8 @@ public enum Inline: Equatable {
         case .code(let s): return s
         case .link(let kids, _): return kids.map { $0.plainText }.joined()
         case .lineBreak: return " "
+        case .superscript(let s): return s
+        case .subscript(let s): return s
         }
     }
 }
