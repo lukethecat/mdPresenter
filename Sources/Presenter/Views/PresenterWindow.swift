@@ -3,18 +3,21 @@ import Combine
 import SwiftUI
 import PresenterCore
 
-// MARK: - Presentation Mode (the teleprompter)
+// MARK: - Presentation Mode (Keynote-style fullscreen)
 //
-// ⌥⌘P opens a dedicated screen: the audience sees the slide, you see your
-// notes on top of it. Two modes: Speaker Notes (default) and Thumbnails.
-// The elapsed timer, the next-slide preview and the blue→gold progress
-// color all follow iA's presentation mode.
+// ⌥⌘P opens a dedicated screen where the SLIDE ITSELF fills the entire
+// display. The chrome is a floating, auto-hiding glass overlay: a thin
+// progress bar, prev/next, the timer — and an optional teleprompter
+// drawer (备注/缩略图) that slides in over the slide when you need it.
 
 struct PresenterView: View {
     @EnvironmentObject var state: AppState
     @State private var mode: PresenterMode = .notes
     @State private var elapsed: TimeInterval = 0
     @State private var startDate = Date()
+    @State private var controlsVisible = true
+    @State private var hideTask: DispatchWorkItem?
+    @State private var mouseMonitor: Any?
     private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     enum PresenterMode {
@@ -28,13 +31,35 @@ struct PresenterView: View {
             let detectedAspect = portrait ? 9.0 / 16.0 : 16.0 / 9.0
             let slideAspect = state.settings.aspect.ratio ?? detectedAspect
 
-            VStack(spacing: 0) {
-                toolbar
-                HStack(spacing: 0) {
-                    stage(portrait: portrait, slideAspect: slideAspect)
-                    sidePanel(width: min(440, geo.size.width * 0.34))
+            ZStack {
+                // 1. The slide fills the whole screen — content-first.
+                stage(slideAspect: slideAspect)
+
+                // 2. Floating, auto-hiding glass chrome.
+                VStack(spacing: 0) {
+                    topBar
+                        .opacity(controlsVisible ? 1 : 0)
+                    Spacer()
+                    bottomControls
+                        .opacity(controlsVisible ? 1 : 0)
                 }
-                progressBar
+                .animation(.easeInOut(duration: 0.35))
+
+                // 3. Optional teleprompter drawer over the slide.
+                if state.presenterPanelVisible {
+                    HStack {
+                        Spacer()
+                        teleprompterPanel(width: min(440, geo.size.width * 0.34))
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
+                    .animation(.easeInOut(duration: 0.35))
+                }
+
+                // 4. Progress hairline at the very bottom.
+                VStack {
+                    Spacer()
+                    progressBar
+                }
             }
         }
         .background(Color.black)
@@ -42,27 +67,75 @@ struct PresenterView: View {
         .onReceive(timer) { _ in
             elapsed = Date().timeIntervalSince(startDate)
         }
+        .onAppear(perform: installControlAutoHide)
+        .onDisappear(perform: removeControlAutoHide)
     }
 
-    // MARK: Toolbar
+    // MARK: Auto-hiding chrome
 
-    private var toolbar: some View {
-        HStack(spacing: 14) {
-            SegmentedPicker(
-                options: [(PresenterMode.notes, "备注"), (PresenterMode.thumbnails, "缩略图")],
-                selection: $mode
-            )
-            .frame(width: 170)
+    private func installControlAutoHide() {
+        // Any mouse activity reveals the chrome; 3s of stillness hides it.
+        mouseMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .scrollWheel]
+        ) { event in
+            withAnimation(.easeInOut(duration: 0.3)) {
+                controlsVisible = true
+            }
+            hideTask?.cancel()
+            let task = DispatchWorkItem {
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    controlsVisible = false
+                }
+            }
+            hideTask = task
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: task)
+            return event
+        }
+    }
+
+    private func removeControlAutoHide() {
+        hideTask?.cancel()
+        hideTask = nil
+        if let monitor = mouseMonitor {
+            NSEvent.removeMonitor(monitor)
+            mouseMonitor = nil
+        }
+    }
+
+    // MARK: Top bar
+
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            // Teleprompter drawer toggle.
+            Button(action: { state.presenterPanelVisible.toggle() }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "text.bubble")
+                    Text("提词器")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+            }
+            .buttonStyle(GlassButtonStyle(isActive: state.presenterPanelVisible))
+            .help("显示/隐藏提词器 (N)")
 
             Spacer()
 
             if let content = currentContent {
                 let color = ProgressColorEngine.color(at: content.progress)
-                Circle().fill(Color(color)).frame(width: 8, height: 8)
-                Text(stageName(ProgressColorEngine.stageName(at: content.progress)))
-                    .foregroundColor(Color(color))
-                Text("\(state.presenterIndex + 1) / \(max(1, state.deck.contents.count))")
-                    .foregroundColor(Color(hex: 0xB9BCC4))
+                HStack(spacing: 8) {
+                    Circle().fill(Color(color)).frame(width: 8, height: 8)
+                    Text(stageName(ProgressColorEngine.stageName(at: content.progress)))
+                        .foregroundColor(Color(color))
+                    Text("\(state.presenterIndex + 1) / \(max(1, state.deck.contents.count))")
+                        .foregroundColor(Color(hex: 0xB9BCC4))
+                }
+                .font(.system(size: 12, weight: .medium))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .liquidGlass(cornerRadius: 9, tint: Color.black.opacity(0.4), interactive: false)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
 
             Button(action: { startDate = Date(); elapsed = 0 }) {
@@ -73,7 +146,7 @@ struct PresenterView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(.white)
                 .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .padding(.vertical, 6)
             }
             .buttonStyle(GlassButtonStyle())
             .help("点击重置计时器")
@@ -81,19 +154,43 @@ struct PresenterView: View {
             Button(action: { state.stopPresentation() }) {
                 Image(systemName: "stop.fill")
                     .foregroundColor(.white)
-                    .frame(width: 28, height: 24)
+                    .frame(width: 30, height: 26)
             }
             .buttonStyle(GlassButtonStyle(accent: true, accentColor: Color(hex: 0xE53935)))
             .help("停止演示 (⌥⌘P / Esc)")
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
-        .liquidGlass(cornerRadius: 0, tint: Color.black.opacity(0.45))
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
     }
 
-    // MARK: Stage
+    // MARK: Bottom controls
 
-    private func stage(portrait: Bool, slideAspect: CGFloat) -> some View {
+    private var bottomControls: some View {
+        HStack(spacing: 10) {
+            Button(action: { state.presenterPrevious() }) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 34, height: 28)
+            }
+            .buttonStyle(GlassButtonStyle())
+            .help("上一张 (←)")
+
+            Button(action: { state.presenterNext() }) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 34, height: 28)
+            }
+            .buttonStyle(GlassButtonStyle())
+            .help("下一张 (→ / 空格 / 点击)")
+        }
+        .padding(.bottom, 14)
+    }
+
+    // MARK: Stage — the slide owns the screen
+
+    private func stage(slideAspect: CGFloat) -> some View {
         GeometryReader { geo in
             ZStack {
                 Color(hex: 0x0B0C0E)
@@ -128,21 +225,28 @@ struct PresenterView: View {
                         media: state.media
                     )
                     .frame(width: slideW, height: slideH)
-                    .shadow(color: .black.opacity(0.6), radius: 30, y: 10)
                     .onTapGesture { state.presenterNext() }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(24)
     }
 
-    // MARK: Side panel
+    // MARK: Teleprompter drawer
 
-    @ViewBuilder
-    private func sidePanel(width: CGFloat) -> some View {
-        GlassPanel(cornerRadius: 20, tint: Color.black.opacity(0.42)) {
+    private func teleprompterPanel(width: CGFloat) -> some View {
+        GlassPanel(cornerRadius: 20, tint: Color.black.opacity(0.48)) {
             VStack(spacing: 0) {
+                HStack {
+                    SegmentedPicker(
+                        options: [(PresenterMode.notes, "备注"), (PresenterMode.thumbnails, "缩略图")],
+                        selection: $mode
+                    )
+                    .frame(width: 170)
+                    Spacer()
+                }
+                .padding(12)
+                Divider().background(Color.white.opacity(0.08))
                 nextSlide(width: width)
                 Divider().background(Color.white.opacity(0.08))
                 if mode == .notes {
@@ -298,7 +402,7 @@ struct PresenterView: View {
                     .animation(.easeOut(duration: 0.3))
             }
         }
-        .frame(height: 5)
+        .frame(height: 4)
     }
 
     // MARK: Helpers
@@ -384,6 +488,7 @@ final class PresenterWindowController: NSObject, NSWindowDelegate {
                 case 126: state.presenterPrevious(); return nil // ↑
                 case 49: state.presenterNext(); return nil      // space
                 case 53: state.stopPresentation(); return nil   // esc
+                case 45: state.presenterPanelVisible.toggle(); return nil // n: 提词器
                 case 15:
                     if event.charactersIgnoringModifiers == "r" { return nil }
                 default: break

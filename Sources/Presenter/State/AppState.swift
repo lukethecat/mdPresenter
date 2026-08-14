@@ -53,6 +53,7 @@ final class AppState: ObservableObject {
 
     @Published var isPresenting = false
     @Published var presenterIndex = 0
+    @Published var presenterPanelVisible = false
 
     enum PreviewDevice: String, CaseIterable {
         case desktop
@@ -248,6 +249,7 @@ final class AppState: ObservableObject {
 
     func stopPresentation() {
         isPresenting = false
+        presenterPanelVisible = false
         PresenterWindowController.shared.close()
     }
 
