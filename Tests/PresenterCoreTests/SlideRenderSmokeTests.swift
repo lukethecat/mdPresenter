@@ -113,8 +113,10 @@ final class SlideRenderSmokeTests: XCTestCase {
         )
 
         state.stopPresentation()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
         XCTAssertFalse(state.isPresenting)
+        // The fullscreen Space exit animates (~1s) before windowDidExitFullScreen
+        // orders the window out — wait through it.
+        RunLoop.main.run(until: Date().addingTimeInterval(1.8))
         XCTAssertFalse(PresenterWindowController.shared.isWindowVisible)
     }
 

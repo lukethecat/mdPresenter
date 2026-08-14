@@ -165,4 +165,21 @@ final class DesignVerificationTests: XCTestCase {
         XCTAssertGreaterThan(bottom.b - bottom.r, 0.12, "systemBlue end should stay vivid")
         XCTAssertGreaterThan(distance(top, bottom), 0.25, "must be a real pastel gradient")
     }
+
+    /// Regression test for "第二页开始都是小字": statement headlines must
+    /// carry the fitted display size, not the default body font.
+    func testStatementHeadlineRendersLarge() throws {
+        guard let rep = render(
+            themeId: "glass", slideIndex: 1, mode: .dark,
+            size: CGSize(width: 1280, height: 720)
+        ) else {
+            return XCTFail("render failed")
+        }
+        // A fitted ~140pt white headline covers thousands of sample pixels;
+        // the old bug (default 13pt font) would cover only a few hundred.
+        XCTAssertGreaterThan(
+            whitePixelCount(rep), 1500,
+            "headline should render at display size, not body size"
+        )
+    }
 }

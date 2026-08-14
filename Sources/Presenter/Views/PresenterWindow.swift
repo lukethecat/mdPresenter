@@ -554,8 +554,29 @@ final class PresenterWindowController: NSObject, NSWindowDelegate {
             NSEvent.removeMonitor(monitor)
             keyMonitor = nil
         }
-        window?.level = .normal
-        window?.orderOut(nil)
+        guard let window = window else {
+            state = nil
+            return
+        }
+        window.level = .normal
+        if window.styleMask.contains(.fullScreen) {
+            // Exit the fullscreen Space explicitly — ordering out alone
+            // leaves a black, window-less Space behind (Esc → 黑屏 bug).
+            // windowDidExitFullScreen hides the window once we're back.
+            DispatchQueue.main.async {
+                window.toggleFullScreen(nil)
+            }
+            // Guaranteed cleanup: if the exit animation stalls, force-hide.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                window.orderOut(nil)
+            }
+        } else {
+            window.orderOut(nil)
+        }
         state = nil
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        (notification.object as? NSWindow)?.orderOut(nil)
     }
 }

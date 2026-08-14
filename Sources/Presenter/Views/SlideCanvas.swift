@@ -31,10 +31,10 @@ struct InlineTextView: View {
                 result = result + Text(s)
             case .bold(let kids):
                 let inner = build(kids, parentBold: true)
-                result = result + inner.font(.custom(family, size: baseSize)).fontWeight(.bold)
+                result = result + inner.fontWeight(.bold)
             case .italic(let kids):
                 let inner = build(kids, parentBold: parentBold)
-                result = result + inner.font(.custom(family, size: baseSize)).italic()
+                result = result + inner.italic()
             case .code(let s):
                 result = result + Text(s)
                     .font(.system(size: baseSize * 0.86, weight: .regular, design: .monospaced))
@@ -46,7 +46,12 @@ struct InlineTextView: View {
                 result = result + Text("\n")
             }
         }
-        return result.foregroundColor(color)
+        // Apply the base font to EVERY segment — including plain text.
+        // (Previously only bold/italic segments carried a font, so plain
+        // headlines rendered at the tiny default size.)
+        return result
+            .font(.custom(family, size: baseSize))
+            .foregroundColor(color)
     }
 }
 
