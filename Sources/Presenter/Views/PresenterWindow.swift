@@ -327,23 +327,33 @@ struct PresenterView: View {
 
 // MARK: - Presenter window (AppKit shell)
 
-final class PresenterWindowController {
+final class PresenterWindowController: NSObject, NSWindowDelegate {
     static let shared = PresenterWindowController()
 
     private var window: NSWindow?
     private var keyMonitor: Any?
+    private var fallbackWork: DispatchWorkItem?
     private weak var state: AppState?
 
     /// Exposed for tests / diagnostics.
     var isWindowVisible: Bool { window?.isVisible ?? false }
+    var currentWindow: NSWindow? { window }
+
+    // A borderless window entering a fullscreen Space otherwise keeps its
+    // own (possibly small) frame — the delegate must claim the whole screen.
+    func window(_ window: NSWindow, willUseFullScreenContentSize proposedSize: NSSize) -> NSSize {
+        (window.screen ?? NSScreen.main)?.frame.size ?? proposedSize
+    }
 
     func present(state: AppState) {
         self.state = state
         if window == nil {
-            let screen = NSScreen.screens.first(where: { $0 != NSScreen.main })
-                ?? NSScreen.main
-                ?? NSScreen.screens.first
+            // Target the screen the user is looking at (mouse), then key
+            // window's screen, then the main screen.
+            let mouseScreen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+            let screen = mouseScreen ?? NSScreen.main ?? NSScreen.screens.first
             let frame = screen?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+            NSLog("Presenter: target screen \(NSStringFromRect(screen?.frame ?? .zero))")
 
             let root = PresenterView().environmentObject(state)
             let hosting = NSHostingController(rootView: root)
@@ -362,6 +372,7 @@ final class PresenterWindowController {
             // `.fullScreenAuxiliary` would silently block toggleFullScreen —
             // use `.fullScreenPrimary` so the presenter can own a Space.
             win.collectionBehavior = [.canJoinAllSpaces, .fullScreenPrimary]
+            win.delegate = self
             window = win
 
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -393,25 +404,52 @@ final class PresenterWindowController {
             window.orderFrontRegardless()
         }
 
-        // Deterministic fullscreen: cover the whole target screen INCLUDING
-        // menu bar and Dock (kiosk level), since toggleFullScreen is
-        // unreliable for borderless windows on macOS 26/27.
+        // Stage 1: a real fullscreen Space (with delegate-provided size).
         DispatchQueue.main.async { [weak self, weak state] in
-            guard let window = self?.window, let state = state,
-                  state.isPresenting else { return }
-            let screen = window.screen ?? NSScreen.main
-            if let screen = screen {
-                window.setFrame(screen.frame, display: true)
+            guard let self = self, let window = self.window,
+                  let state = state, state.isPresenting else { return }
+            if !window.styleMask.contains(.fullScreen) {
+                window.toggleFullScreen(nil)
             }
-            window.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
+            self.scheduleFallback(window: window, state: state)
         }
     }
 
+    /// Stage 2: if the Space didn't happen within ~1.2s, cover the whole
+    /// screen deterministically at the shielding level (menu bar included).
+    private func scheduleFallback(window: NSWindow, state: AppState) {
+        fallbackWork?.cancel()
+        let work = DispatchWorkItem { [weak self, weak state] in
+            guard let self = self, let window = self.window,
+                  let state = state, state.isPresenting else { return }
+            let screen = window.screen ?? NSScreen.main
+            if !window.styleMask.contains(.fullScreen) {
+                if let screen = screen {
+                    window.setFrame(screen.frame, display: true)
+                }
+                window.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
+                NSLog("Presenter: fullscreen Space unavailable — kiosk overlay \(window.frame), level \(window.level.rawValue)")
+            } else {
+                // Inside the Space: guarantee the borderless window fills it.
+                if let screen = screen {
+                    window.setFrame(screen.frame, display: true)
+                }
+                window.level = .normal
+                NSLog("Presenter: fullscreen Space active — frame \(window.frame)")
+            }
+        }
+        fallbackWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: work)
+    }
+
     func close() {
+        fallbackWork?.cancel()
+        fallbackWork = nil
         if let monitor = keyMonitor {
             NSEvent.removeMonitor(monitor)
             keyMonitor = nil
         }
+        window?.level = .normal
         window?.orderOut(nil)
         state = nil
     }

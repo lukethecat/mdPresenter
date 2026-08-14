@@ -82,24 +82,38 @@ final class SlideRenderSmokeTests: XCTestCase {
         }
     }
 
-    /// Regression test for "点击演示无反应": the presenter window must
-    /// actually become visible when presentation starts.
-    func testPresenterWindowOpens() throws {
+    /// Regression test for "点击演示无反应" and "还不是全屏幕": the
+    /// presenter window must be visible AND cover the whole target screen
+    /// (via fullscreen Space or the shielding-level kiosk fallback).
+    func testPresenterWindowOpensAndCoversScreen() throws {
         let state = AppState()
         state.reparse()
         XCTAssertFalse(state.deck.contents.isEmpty, "sample deck should have slides")
 
         state.startPresentation()
         XCTAssertTrue(state.isPresenting)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+        // Let stage 1 (fullscreen Space) and stage 2 (kiosk fallback) settle.
+        RunLoop.main.run(until: Date().addingTimeInterval(2.4))
 
-        XCTAssertTrue(
-            PresenterWindowController.shared.isWindowVisible,
-            "presenter window should be visible after startPresentation"
+        guard let window = PresenterWindowController.shared.currentWindow else {
+            return XCTFail("presenter window not found")
+        }
+        XCTAssertTrue(window.isVisible, "presenter window should be visible")
+
+        let screen = window.screen ?? NSScreen.main
+        if let screen = screen {
+            let fullSize = window.styleMask.contains(.fullScreen)
+                || window.frame == screen.frame
+            XCTAssertTrue(fullSize, "window \(window.frame) should cover screen \(screen.frame)")
+        }
+        XCTAssertEqual(
+            window.level.rawValue == Int(CGShieldingWindowLevel()) || window.styleMask.contains(.fullScreen),
+            true,
+            "window must be at shielding level or in a fullscreen Space"
         )
 
         state.stopPresentation()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
         XCTAssertFalse(state.isPresenting)
         XCTAssertFalse(PresenterWindowController.shared.isWindowVisible)
     }
