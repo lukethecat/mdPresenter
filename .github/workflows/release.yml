@@ -23,25 +23,20 @@ jobs:
       - name: Build universal binary (arm64 + x86_64)
         run: swift build -c release --arch arm64 --arch x86_64
 
-      - name: Assemble mdPresenter.app
-        run: UNIVERSAL=1 ./scripts/make-app.sh
-
-      - name: Create DMG
-        run: |
-          hdiutil create -volname "mdPresenter" \
-            -srcfolder .build/app-bundle/mdPresenter.app \
-            -ov -format UDZO \
-            "mdPresenter-macOS-universal.dmg"
+      - name: Assemble DMG (app + Applications shortcut + checksum)
+        run: UNIVERSAL=1 ./scripts/make-dmg.sh
 
       - name: Verify bundle
         run: |
           lipo -info .build/app-bundle/mdPresenter.app/Contents/MacOS/Presenter
-          ls -la mdPresenter-macOS-universal.dmg
+          hdiutil verify dist/mdPresenter-macOS-universal.dmg
+          ls -la dist/
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            mdPresenter-macOS-universal.dmg
+            dist/mdPresenter-macOS-universal.dmg
+            dist/mdPresenter-macOS-universal.dmg.sha256
             .build/app-bundle/mdPresenter.app
           generate_release_notes: true

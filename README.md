@@ -98,6 +98,16 @@ UNIVERSAL=1 ./scripts/make-app.sh         # Intel + Apple Silicon 通用 .app
 
 要求：macOS 11+，Xcode 12.5+。或直接下载 [Releases](https://github.com/lukethecat/mdPresenter/releases) 中的 DMG。
 
+## 安装（DMG）
+
+1. 双击 DMG，把 **mdPresenter** 拖到 **Applications** 快捷方式上（DMG 内自带）。
+2. **首次打开**：本项目是开源软件，使用临时（ad-hoc）签名、未经过 Apple 公证（公证需要付费的 Apple Developer 账号）。macOS 会提示「无法验证开发者」——这是正常现象，任选其一放行：
+   - 打开 **系统设置 → 隐私与安全性**，在底部找到「仍要打开」按钮点击确认；或
+   - 在终端执行：`xattr -cr /Applications/mdPresenter.app`
+3. 校验完整性（可选）：`shasum -a 256 mdPresenter-macOS-universal.dmg` 应与 Releases 附带的 `.sha256` 一致。
+
+> 有 Apple Developer 账号的贡献者：欢迎 PR 接入 `codesign + notarytool` 公证流水线（需要签名证书与公证凭据，不适合放在公开 CI 密钥里）。
+
 ## 架构
 
 ```
