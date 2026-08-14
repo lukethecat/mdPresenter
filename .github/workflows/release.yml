@@ -14,6 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Use newest installed Xcode (needed for the macOS 26 glass API)
+        run: |
+          XC=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XC" ] && sudo xcode-select -s "$XC"
+          xcodebuild -version
+
       - name: Build universal binary (arm64 + x86_64)
         run: swift build -c release --arch arm64 --arch x86_64
 

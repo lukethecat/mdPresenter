@@ -27,25 +27,37 @@ struct VisualEffectBackground: NSViewRepresentable {
 }
 
 extension View {
-    /// Apply Liquid Glass to this view: real glass on macOS 26+, blur on older systems.
+    /// Apply Liquid Glass to this view: real glass on macOS 26+ (Xcode 26 /
+    /// Swift 6.2+), blur approximation everywhere else. The `#if compiler`
+    /// gate keeps the code compilable on CI runners with older SDKs, where
+    /// `glassEffect` / `Glass` don't exist yet.
     @ViewBuilder
     func liquidGlass(
         cornerRadius: CGFloat = 14,
         tint: Color = Color.black.opacity(0.30),
         interactive: Bool = false
     ) -> some View {
+        #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             self.glassEffect(
                 Glass.regular.tint(tint).interactive(interactive),
                 in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             )
         } else {
-            self.background(
-                VisualEffectBackground(material: .hudWindow, blending: .behindWindow)
-                    .overlay(tint)
-                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            )
+            fallbackGlass(cornerRadius: cornerRadius, tint: tint)
         }
+        #else
+        fallbackGlass(cornerRadius: cornerRadius, tint: tint)
+        #endif
+    }
+
+    @ViewBuilder
+    private func fallbackGlass(cornerRadius: CGFloat, tint: Color) -> some View {
+        self.background(
+            VisualEffectBackground(material: .hudWindow, blending: .behindWindow)
+                .overlay(tint)
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        )
     }
 
     /// The liquid-glass specular rim: light catches the top edge, shadow hugs the bottom.

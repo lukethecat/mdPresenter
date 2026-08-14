@@ -28,8 +28,8 @@ struct PresenterView: View {
     var body: some View {
         GeometryReader { geo in
             let portrait = geo.size.height > geo.size.width * 1.05
-            let detectedAspect = portrait ? 9.0 / 16.0 : 16.0 / 9.0
-            let slideAspect = state.settings.aspect.ratio ?? detectedAspect
+            let detectedAspect: CGFloat = portrait ? 9.0 / 16.0 : 16.0 / 9.0
+            let slideAspect: CGFloat = state.settings.aspect.ratio ?? detectedAspect
 
             ZStack {
                 // 1. The slide fills the whole screen — content-first.
