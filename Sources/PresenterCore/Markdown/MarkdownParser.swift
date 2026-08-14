@@ -219,6 +219,13 @@ public struct MarkdownParser {
                 paraLines.append(t)
                 i += 1
             }
+            // 进度保障：任何情况下段落分支都必须前进——否则当某行
+            // 被 startsBlock 判为块起点、却又没有任何块分支消费它时，
+            // 会死循环追加空段落（曾导致 13M 个 Block / 2.6GB 内存）。
+            if paraLines.isEmpty {
+                i += 1
+                continue
+            }
             var block = Block(kind: .paragraph)
             block.isTabbedOnSlide = tabbed
             var inlines: [Inline] = []
@@ -254,15 +261,29 @@ public struct MarkdownParser {
     // MARK: - Block helpers
 
     static func startsBlock(_ trimmedLine: String) -> Bool {
-        if trimmedLine.hasPrefix("#") { return true }
+        if isHeadingStart(trimmedLine) { return true }
         if trimmedLine.hasPrefix("```") || trimmedLine.hasPrefix("~~~") { return true }
         if trimmedLine.hasPrefix(">") { return true }
         if trimmedLine.hasPrefix("- ") || trimmedLine.hasPrefix("* ") || trimmedLine.hasPrefix("+ ") { return true }
-        if trimmedLine.hasPrefix("|") { return true }
+        // 注意：不要把「|」当作通用块起点——没有分隔行的管道行会落入
+        // 段落分支并被进度保障跳过/或作为普通文本；真正的表格由表格
+        // 分支（header + separator）先行消费。
         if isOrderedListItem(trimmedLine) { return true }
         if trimmedLine == "---" || trimmedLine == "***" || trimmedLine == "___" { return true }
         if isBareImageLine(trimmedLine) { return true }
         return false
+    }
+
+    /// `#` 只有后跟空格/制表符/行尾才是标题起点（`#foo` 是正文）。
+    static func isHeadingStart(_ line: String) -> Bool {
+        guard line.hasPrefix("#") else { return false }
+        var level = 0
+        for ch in line {
+            if ch == "#" { level += 1 } else { break }
+        }
+        guard level >= 1 && level <= 6 else { return false }
+        let rest = line.dropFirst(level)
+        return rest.isEmpty || rest.hasPrefix(" ") || rest.hasPrefix("\t")
     }
 
     /// Supported image extensions (iA images list + a few extras).

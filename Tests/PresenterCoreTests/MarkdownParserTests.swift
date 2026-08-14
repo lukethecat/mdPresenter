@@ -72,6 +72,17 @@ final class MarkdownParserTests: XCTestCase {
         XCTAssertEqual(blocks[0].columnAlignments, ["c", "r"])
     }
 
+    /// 回归：没有分隔行的管道行曾导致解析器死循环（无限追加空段落，
+    /// 2.6GB 内存/未响应）。现在必须被消费为普通段落或安全跳过。
+    func testPipeLineWithoutSeparatorDoesNotHang() {
+        let blocks = MarkdownParser.parseBlocks("| 指标 | 数值 |")
+        XCTAssertLessThan(blocks.count, 3, "must terminate with bounded blocks")
+        let blocks2 = MarkdownParser.parseBlocks("|")
+        XCTAssertLessThan(blocks2.count, 3)
+        let blocks3 = MarkdownParser.parseBlocks("| --- | --- |")
+        XCTAssertLessThan(blocks3.count, 3)
+    }
+
     func testBareImageURLWithQueryString() {
         let blocks = MarkdownParser.parseBlocks("https://example.com/photo.png?w=800#frag")
         XCTAssertEqual(blocks.count, 1)
