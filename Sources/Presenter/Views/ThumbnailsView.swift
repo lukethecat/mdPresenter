@@ -84,7 +84,8 @@ private struct ThumbnailCell: View {
                     content: content,
                     style: style,
                     settings: state.settings,
-                    media: state.media
+                    media: state.media,
+                    layoutOverride: state.layoutOverride(for: content.index)
                 )
                 .aspectRatio(16.0 / 9.0, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 4))

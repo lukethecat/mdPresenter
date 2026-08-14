@@ -17,10 +17,36 @@ public struct IAPresenterImporter {
 
     /// Try to import an iA Presenter bundle. Returns nil when `url` is not
     /// an iA bundle (callers then fall back to other formats).
+    /// Accepts both forms: an on-disk directory bundle AND a `.zip` archive
+    /// (the official docs describe `.iapresenter` as "a .zip that includes
+    /// your markdown presentation file and all your images").
     public static func document(from url: URL) throws -> DocumentFile? {
         let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
-        guard values?.isDirectory == true else { return nil }
+        if values?.isDirectory == true {
+            return try importBundle(url)
+        }
+        // Single file: maybe a zipped bundle. Unzip with the system tool.
+        let ext = url.pathExtension.lowercased()
+        guard ext == "iapresenter" || ext == "presenter" else { return nil }
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ia-import-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = ["-x", "-k", url.path, tempDir.path]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        let textURL = tempDir.appendingPathComponent("text.md")
+        guard FileManager.default.fileExists(atPath: textURL.path) else { return nil }
+        return try importBundle(tempDir)
+    }
 
+    private static func importBundle(_ url: URL) throws -> DocumentFile? {
         let textURL = url.appendingPathComponent("text.md")
         guard FileManager.default.fileExists(atPath: textURL.path) else { return nil }
 

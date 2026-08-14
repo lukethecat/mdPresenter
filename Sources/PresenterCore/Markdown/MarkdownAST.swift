@@ -91,6 +91,11 @@ public struct Block: Equatable {
     public var isMedia: Bool {
         kind == .image || kind == .video || kind == .audio
     }
+
+    /// iA `background: true` (or `order: background`) — renders behind content.
+    public var isBackgroundMedia: Bool {
+        isMedia && (metadata["background"] == "true" || metadata["order"] == "background")
+    }
 }
 
 // MARK: - Slide model

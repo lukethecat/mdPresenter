@@ -16,7 +16,7 @@ struct InspectorView: View {
         GlassPanel(cornerRadius: 16, tint: Color.black.opacity(state.currentSlideIsLight ? 0.32 : 0.14)) {
             VStack(spacing: 0) {
                 SegmentedPicker(
-                    options: [(0, "文本 Text"), (1, "设计 Design")],
+                    options: [(0, "文本 Text"), (1, "设计 Design"), (2, "媒体 Media")],
                     selection: $tab
                 )
                 .padding(10)
@@ -25,10 +25,10 @@ struct InspectorView: View {
 
                 ScrollView {
                     Group {
-                        if tab == 0 {
-                            TextTab()
-                        } else {
-                            DesignTab()
+                        switch tab {
+                        case 0: TextTab()
+                        case 1: DesignTab()
+                        default: MediaTab()
                         }
                     }
                     .padding(12)
@@ -36,6 +36,121 @@ struct InspectorView: View {
             }
         }
         .padding(10)
+    }
+}
+
+// MARK: Media tab (iA's Media Manager)
+
+private struct MediaTab: View {
+    @EnvironmentObject var state: AppState
+    @State private var editingID: String?
+    @State private var editingName = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            section("媒体库 Media Manager") {
+                if state.media.isEmpty {
+                    Text("还没有媒体。把图片拖进编辑器，或粘贴一张图片。")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(hex: 0x6E7279))
+                } else {
+                    VStack(spacing: 6) {
+                        ForEach(state.media) { attachment in
+                            HStack(spacing: 8) {
+                                Image(systemName: attachment.isImage ? "photo" : (attachment.isVideo ? "play.rectangle" : "waveform"))
+                                    .font(.system(size: 12))
+                                    .foregroundColor(Color(hex: 0xF5C518))
+                                    .frame(width: 16)
+                                if editingID == attachment.id {
+                                    TextField("文件名", text: $editingName, onCommit: {
+                                        state.renameMedia(id: attachment.id, to: editingName)
+                                        editingID = nil
+                                    })
+                                    .textFieldStyle(PlainTextFieldStyle())
+                                    .font(.system(size: 11))
+                                    .padding(4)
+                                    .background(RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.06)))
+                                } else {
+                                    Text(attachment.fileName)
+                                        .font(.system(size: 11))
+                                        .foregroundColor(Color(hex: 0xD9D9D6))
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                Button(action: {
+                                    state.insertMediaRef(id: attachment.id)
+                                }) {
+                                    Image(systemName: "plus.square.on.square")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(Color(hex: 0x9AA0A9))
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .help("插入到当前幻灯片")
+                                Button(action: {
+                                    editingID = attachment.id
+                                    editingName = attachment.fileName
+                                }) {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(Color(hex: 0x9AA0A9))
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .help("重命名")
+                                Button(action: { state.deleteMedia(id: attachment.id) }) {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(Color(hex: 0xE53935))
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .help("删除（同时移除引用）")
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+            }
+
+            section("YouTube") {
+                Button(action: addYouTube) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "link.badge.plus")
+                        Text("添加 YouTube 视频")
+                    }
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                }
+                .buttonStyle(GlassButtonStyle(accent: true, accentColor: Color(hex: 0xE53935)))
+                Text("建议把 YouTube 视频放在空白幻灯片上，播放时显示面积最大。")
+                    .font(.system(size: 10))
+                    .foregroundColor(Color(hex: 0x6E7279))
+            }
+        }
+    }
+
+    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: title)
+            content()
+        }
+    }
+
+    private func addYouTube() {
+        let alert = NSAlert()
+        alert.messageText = "添加 YouTube 视频"
+        alert.informativeText = "粘贴 YouTube 链接："
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.placeholderString = "https://www.youtube.com/watch?v=…"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "添加")
+        alert.addButton(withTitle: "取消")
+        if alert.runModal() == .alertFirstButtonReturn {
+            let url = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !url.isEmpty {
+                state.addYouTubeLink(url)
+            }
+        }
     }
 }
 

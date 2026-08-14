@@ -218,7 +218,8 @@ enum ExportCoordinator {
             content: content,
             style: style,
             settings: state.settings,
-            media: state.media
+            media: state.media,
+            layoutOverride: state.layoutOverride(for: content.index)
         )
         .frame(width: size.width, height: size.height)
         .environmentObject(state)

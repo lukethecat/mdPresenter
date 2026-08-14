@@ -133,4 +133,55 @@ final class IAPresenterImporterTests: XCTestCase {
         let inline = MarkdownParser.parseInline("~~删除~~ 与 ==高亮==")
         XCTAssertEqual(inline.plainText, "删除 与 高亮", "markers must be stripped")
     }
+
+    // MARK: iA layouts semantics
+
+    func testTabbedTextBecomesKickerAboveTitle() throws {
+        let slide = MarkdownParser.parse("\t小标题 Kicker\n\n# 主标题")
+        let content = ContentResolver.resolve(slide: slide, index: 1, total: 2)
+        XCTAssertEqual(content.kicker?.plainText, "小标题 Kicker")
+        XCTAssertEqual(content.headline?.plainText, "主标题")
+    }
+
+    func testTitleSlideKickerAndTabbedSubtitle() throws {
+        let slide = MarkdownParser.parse("\tFast and Focused\n\n# Main Title\n\n\tSubtitle line\n\n开场白")
+        let content = ContentResolver.resolve(slide: slide, index: 0, total: 2)
+        XCTAssertEqual(content.title?.plainText, "Main Title")
+        XCTAssertEqual(content.kicker?.plainText, "Fast and Focused")
+        XCTAssertEqual(content.subtitle?.plainText, "Subtitle line")
+    }
+
+    func testBackgroundImageIsExcludedFromLayout() throws {
+        let slide = MarkdownParser.parse("# 标题\n\n![bg](media://x)\nbackground: true")
+        let content = ContentResolver.resolve(slide: slide, index: 1, total: 2)
+        XCTAssertNotEqual(content.layout, .split, "background image must not trigger split layout")
+        XCTAssertEqual(content.layout, .statement)
+        XCTAssertTrue(content.onSlide.contains { $0.isBackgroundMedia })
+    }
+
+    func testLayoutOverrideDisplayNames() {
+        XCTAssertEqual(SlideLayoutKind.allCases.count, 9)
+        XCTAssertFalse(SlideLayoutKind.statement.displayName.isEmpty)
+    }
+
+    func testZippedIABundleImports() throws {
+        try makeBundle(text: "# 标题\n\n\t可见文字\n\n/assets/pic.png\n\n备注")
+        // Zip the bundle the way Finder / iA exports it.
+        let zipURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("zip-\(UUID().uuidString).iapresenter")
+        defer { try? FileManager.default.removeItem(at: zipURL) }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = ["-c", "-k", bundleURL.path, zipURL.path]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+
+        let doc = try XCTUnwrap(IAPresenterImporter.document(from: zipURL))
+        XCTAssertEqual(doc.media.count, 1, "assets inside the zip must be imported")
+        let deck = Deck(text: doc.markdown)
+        XCTAssertEqual(deck.contents.first?.title?.plainText, "标题")
+    }
 }

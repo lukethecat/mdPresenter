@@ -79,7 +79,8 @@ struct SlidePreviewPanel: View {
                         content: content,
                         style: style,
                         settings: state.settings,
-                        media: state.media
+                        media: state.media,
+                        layoutOverride: state.layoutOverride(for: content.index)
                     )
                     .frame(width: slideW, height: slideH)
                     .clipShape(RoundedRectangle(cornerRadius: 10))

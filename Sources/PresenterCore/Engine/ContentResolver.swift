@@ -10,7 +10,7 @@ import Foundation
 // On the very first slide the first headline becomes the Title and the
 // second headline becomes the Subtitle.
 
-public enum SlideLayoutKind: String {
+public enum SlideLayoutKind: String, CaseIterable {
     case title        // big title + subtitle (first slide)
     case statement    // one big headline
     case split        // headline + text on one side, media on the other
@@ -20,6 +20,21 @@ public enum SlideLayoutKind: String {
     case quote        // headline + supporting text
     case columns      // iA multi-column: heading + text pairs side by side
     case empty
+
+    /// Human label for the layout picker (iA's "+" layout button).
+    public var displayName: String {
+        switch self {
+        case .title: return "标题页"
+        case .statement: return "大标题"
+        case .split: return "图文分栏"
+        case .mediaFull: return "大图"
+        case .grid: return "网格"
+        case .table: return "表格"
+        case .quote: return "标题 + 文本"
+        case .columns: return "多列"
+        case .empty: return "空白"
+        }
+    }
 }
 
 public struct SlideContent: Equatable {
@@ -69,6 +84,18 @@ public struct ContentResolver {
         if isTitle {
             if !headings.isEmpty { title = headings[0] }
             if headings.count > 1 { subtitle = headings[1] }
+            // iA title slide: tabbed text above the title = kicker, below = subtitle.
+            let all = slide.blocks
+            if let titleIndex = title.flatMap({ t in all.firstIndex(of: t) }) {
+                if titleIndex > 0 {
+                    let prev = all[titleIndex - 1]
+                    if prev.isTabbedOnSlide, prev.kind == .paragraph { kicker = prev }
+                }
+                if subtitle == nil, titleIndex + 1 < all.count {
+                    let next = all[titleIndex + 1]
+                    if next.isTabbedOnSlide, next.kind == .paragraph { subtitle = next }
+                }
+            }
             // Extra headings on the title slide become speaker notes.
             let kept = [title, subtitle].compactMap { $0 }
             onSlide.removeAll { block in
@@ -82,7 +109,19 @@ public struct ContentResolver {
             let h2 = headings.first { $0.level == 2 }
             let h3 = headings.first { $0.level >= 3 }
             headline = h1 ?? h2 ?? h3 ?? headings.first
-            kicker = headline != nil && h3 != nil && h3 != headline ? h3 : nil
+            // iA kicker: a tabbed paragraph directly ABOVE the main heading
+            // takes priority over an H3 kicker.
+            if let headline = headline,
+               let headlineIndex = slide.blocks.firstIndex(of: headline),
+               headlineIndex > 0 {
+                let prev = slide.blocks[headlineIndex - 1]
+                if prev.isTabbedOnSlide, prev.kind == .paragraph {
+                    kicker = prev
+                }
+            }
+            if kicker == nil {
+                kicker = headline != nil && h3 != nil && h3 != headline ? h3 : nil
+            }
             if headline == nil && !headings.isEmpty { headline = headings.first }
             // All headings but the chosen headline/kicker become notes.
             let onSlideHeadings = [headline, kicker].compactMap { $0 }
@@ -141,7 +180,8 @@ public struct ContentResolver {
         isColumns: Bool
     ) -> SlideLayoutKind {
         if isTitle { return .title }
-        let media = onSlide.filter { $0.isMedia }
+        // iA `background: true` images don't participate in layout math.
+        let media = onSlide.filter { $0.isMedia && !$0.isBackgroundMedia }
         let tables = onSlide.filter { $0.kind == .table }
         let textBlocks = onSlide.filter {
             ($0.kind == .paragraph || $0.kind == .bulletList || $0.kind == .orderedList) && $0.isTabbedOnSlide

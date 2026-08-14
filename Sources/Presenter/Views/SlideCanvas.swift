@@ -65,6 +65,9 @@ struct InlineTextView: View {
 }
 
 // MARK: - Media views
+//
+// iA image options from metadata: size (cover/contain), filters
+// (lighten/darken/grayscale/sepia/blur) and opacity.
 
 struct MediaBlockView: View {
     let block: Block
@@ -75,9 +78,8 @@ struct MediaBlockView: View {
         Group {
             if let attachment = attachment, attachment.isImage {
                 if let image = NSImage(data: attachment.data) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
+                    filteredImage(Image(nsImage: image).resizable())
+                        .aspectRatio(contentMode: block.metadata["size"] == "cover" ? .fill : .fit)
                 } else {
                     fallback
                 }
@@ -90,6 +92,33 @@ struct MediaBlockView: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+    }
+
+    @ViewBuilder
+    private func filteredImage(_ view: Image) -> some View {
+        switch block.metadata["filter"]?.lowercased() {
+        case "lighten": filtered(view.brightness(0.22))
+        case "darken": filtered(view.brightness(-0.28))
+        case "grayscale": filtered(view.saturation(0))
+        case "sepia": filtered(view.saturation(0.45).colorMultiply(Color(hex: 0xE8CFA8)))
+        case "blur": filtered(view.blur(radius: 10))
+        default: filtered(view)
+        }
+    }
+
+    @ViewBuilder
+    private func filtered(_ base: some View) -> some View {
+        if let opacity = block.metadata["opacity"], let percent = Self.parsePercent(opacity) {
+            base.opacity(percent)
+        } else {
+            base
+        }
+    }
+
+    static func parsePercent(_ raw: String) -> Double? {
+        let digits = raw.trimmingCharacters(in: CharacterSet(charactersIn: "% "))
+        guard let value = Double(digits) else { return nil }
+        return max(0.05, min(1, value / 100.0))
     }
 
     private var fallback: some View {
@@ -227,6 +256,8 @@ struct SlideCanvas: View {
     let style: SlideStyle
     let settings: DeckSettings
     let media: [MediaAttachment]
+    /// Manual layout override from the layout picker (iA's "+" button).
+    var layoutOverride: SlideLayoutKind? = nil
 
     var body: some View {
         GeometryReader { geo in
@@ -234,11 +265,39 @@ struct SlideCanvas: View {
             let h = geo.size.height
             ZStack {
                 background(width: w, height: h)
+                // iA `background: true` image sits behind everything else.
+                if let bgBlock = backgroundImageBlock {
+                    backgroundImageView(bgBlock, width: w, height: h)
+                }
                 headerFooter(width: w, height: h)
                 slideBody(width: w, height: h)
             }
             .frame(width: w, height: h)
+            .clipped()
         }
+    }
+
+    /// iA background image (`background: true` / `order: background`).
+    private var backgroundImageBlock: Block? {
+        content.onSlide.first { $0.isBackgroundMedia }
+    }
+
+    @ViewBuilder
+    private func backgroundImageView(_ block: Block, width: CGFloat, height: CGFloat) -> some View {
+        if let attachment = attachment(for: block),
+           let image = NSImage(data: attachment.data) {
+            MediaBlockView(block: block, attachment: attachment, cornerRadius: 0)
+                .aspectRatio(contentMode: .fill)
+                .frame(width: width, height: height)
+                .clipped()
+        } else {
+            Color.black.opacity(0.3)
+        }
+    }
+
+    /// Media that participates in layouts (background images excluded).
+    private var foregroundMedia: [Block] {
+        content.onSlide.filter { $0.isMedia && !$0.isBackgroundMedia }
     }
 
     // MARK: Background
@@ -300,7 +359,8 @@ struct SlideCanvas: View {
 
     @ViewBuilder
     private func slideBody(width: CGFloat, height: CGFloat) -> some View {
-        switch content.layout {
+        let effective = layoutOverride ?? content.layout
+        switch effective {
         case .title: titleLayout(width: width, height: height)
         case .statement: statementLayout(width: width, height: height)
         case .quote: quoteLayout(width: width, height: height)
@@ -413,7 +473,7 @@ struct SlideCanvas: View {
 
     @ViewBuilder
     private func splitLayout(width: CGFloat, height: CGFloat) -> some View {
-        let mediaBlocks = content.onSlide.filter { $0.isMedia }
+        let mediaBlocks = foregroundMedia
         let mediaBlock = mediaBlocks.first
         let textBlocks = content.onSlide.filter { $0.isTabbedOnSlide }
         let narrow = width < height * 1.05
@@ -485,7 +545,7 @@ struct SlideCanvas: View {
     }
 
     private func mediaFullLayout(width: CGFloat, height: CGFloat) -> some View {
-        let mediaBlock = content.onSlide.filter { $0.isMedia }.first
+        let mediaBlock = foregroundMedia.first
         return VStack(spacing: height * 0.02) {
             if let mb = mediaBlock {
                 MediaBlockView(block: mb, attachment: attachment(for: mb))
@@ -507,9 +567,10 @@ struct SlideCanvas: View {
     }
 
     private func gridLayout(width: CGFloat, height: CGFloat) -> some View {
-        let mediaBlocks = Array(content.onSlide.filter { $0.isMedia }.prefix(4))
-        let cols = mediaBlocks.count == 1 ? 1 : 2
-        let rows = mediaBlocks.count > 2 ? 2 : 1
+        let mediaBlocks = Array(foregroundMedia.prefix(6))
+        // iA: up to 3 elements side by side; 4+ become a 2-column grid.
+        let cols = mediaBlocks.count == 1 ? 1 : (mediaBlocks.count == 3 ? 3 : 2)
+        let rows = mediaBlocks.count > cols ? 2 : 1
         let theHeadline = content.headline
         return VStack(spacing: height * 0.02) {
             if let headline = theHeadline {

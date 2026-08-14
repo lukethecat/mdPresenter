@@ -95,7 +95,12 @@ final class AppState: ObservableObject {
     }
 
     func reparse() {
+        let previousCount = deck.slides.count
         deck = Deck(text: text)
+        // Layout overrides are keyed by slide index — reset on structure change.
+        if deck.slides.count != previousCount {
+            layoutOverrides = [:]
+        }
         if deck.contents.isEmpty {
             currentSlide = 0
         } else if currentSlide >= deck.contents.count {
@@ -214,6 +219,74 @@ final class AppState: ObservableObject {
         text = newText
         editorCommand.send(.replaceText(newText))
         editorCommand.send(.scrollToSlide(currentSlide))
+    }
+
+    /// Insert an existing media reference at the end of the current slide.
+    func insertMediaRef(id: String) {
+        guard let attachment = media.first(where: { $0.id == id }) else { return }
+        let line = "\n![\(attachment.fileName)](\(attachment.markdownRef))\n"
+        let ns = text as NSString
+        var insertIndex = ns.length
+        if deck.slides.indices.contains(currentSlide) {
+            insertIndex = NSMaxRange(deck.slides[currentSlide].characterRange(in: ns))
+        }
+        let newText = ns.replacingCharacters(in: NSRange(location: insertIndex, length: 0), with: line)
+        text = newText
+        editorCommand.send(.replaceText(newText))
+        editorCommand.send(.scrollToSlide(currentSlide))
+    }
+
+    /// Media Manager: rename an attachment (keep the extension!).
+    func renameMedia(id: String, to newName: String) {
+        guard let idx = media.firstIndex(where: { $0.id == id }) else { return }
+        media[idx].fileName = newName
+    }
+
+    /// Media Manager: delete an attachment and its markdown references.
+    func deleteMedia(id: String) {
+        guard let attachment = media.first(where: { $0.id == id }) else { return }
+        media.removeAll { $0.id == id }
+        // Strip image lines referencing this attachment.
+        let pattern = "!\\[[^\\]]*\\]\\(\(NSRegularExpression.escapedPattern(for: attachment.markdownRef))\\)\\n?"
+        let stripped = text.replacingOccurrences(
+            of: pattern,
+            with: "",
+            options: .regularExpression
+        )
+        if stripped != text {
+            text = stripped
+            editorCommand.send(.replaceText(stripped))
+        }
+    }
+
+    /// Media Manager: add a YouTube link as a video block.
+    func addYouTubeLink(_ url: String) {
+        let line = "\n![🎬 YouTube](\(url))\n"
+        let ns = text as NSString
+        var insertIndex = ns.length
+        if deck.slides.indices.contains(currentSlide) {
+            insertIndex = NSMaxRange(deck.slides[currentSlide].characterRange(in: ns))
+        }
+        let newText = ns.replacingCharacters(in: NSRange(location: insertIndex, length: 0), with: line)
+        text = newText
+        editorCommand.send(.replaceText(newText))
+        editorCommand.send(.scrollToSlide(currentSlide))
+    }
+
+    // MARK: Layout overrides (iA's "+" layout picker)
+
+    @Published var layoutOverrides: [Int: SlideLayoutKind] = [:]
+
+    func layoutOverride(for index: Int) -> SlideLayoutKind? {
+        layoutOverrides[index]
+    }
+
+    func setLayoutOverride(_ layout: SlideLayoutKind?, for index: Int) {
+        if let layout = layout {
+            layoutOverrides[index] = layout
+        } else {
+            layoutOverrides.removeValue(forKey: index)
+        }
     }
 
     // MARK: TurboStart

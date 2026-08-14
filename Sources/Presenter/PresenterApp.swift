@@ -170,6 +170,25 @@ struct MainToolbar: ToolbarContent {
             ) {
                 state.showPreview.toggle()
             }
+
+            // iA 的「+」布局选择器：手动指定当前幻灯片的布局。
+            Menu {
+                Button("自动布局") {
+                    state.setLayoutOverride(nil, for: state.currentSlide)
+                }
+                Divider()
+                ForEach(SlideLayoutKind.allCases, id: \.self) { layout in
+                    Button(layout.displayName) {
+                        state.setLayoutOverride(layout, for: state.currentSlide)
+                    }
+                }
+            } label: {
+                Image(systemName: "plus.rectangle.on.rectangle")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Color(hex: 0xC7C9CE))
+            }
+            .menuStyle(BorderlessButtonMenuStyle())
+            .help("布局（当前幻灯片）")
             ToolbarButton(
                 systemName: "slider.horizontal.3",
                 help: "检查器 (⌥⌘I)",
