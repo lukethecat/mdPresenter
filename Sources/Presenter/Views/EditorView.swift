@@ -187,6 +187,8 @@ struct EditorView: NSViewRepresentable {
             let slides = SlideSplitter.split(state.text)
             if let idx = SlideSplitter.slideIndex(at: charIndex, in: slides, text: state.text as NSString) {
                 state.selectSlide(idx)
+                // The gutter belongs to the editor — keep the caret here.
+                state.editorCommand.send(.focusEditor)
             }
         }
         tv.onTurboPaste = { [weak state] in
@@ -520,7 +522,7 @@ struct EditorView: NSViewRepresentable {
                 let tabRange = NSRange(location: lineRange.location, length: 1)
                 lm.addTemporaryAttribute(
                     .backgroundColor,
-                    value: NSColor(hex: 0x3B82F6).withAlpha(0.35),
+                    value: LiquidGlassPalette.systemBlue.withAlpha(0.35),
                     forCharacterRange: tabRange
                 )
             }

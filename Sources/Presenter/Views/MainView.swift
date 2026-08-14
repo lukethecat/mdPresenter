@@ -106,7 +106,7 @@ struct MainView: View {
                     Text(ProgressColorEngine.stageName(at: progress))
                 }
                 Text(state.totalEstimateLabel)
-                    .foregroundColor(Color(hex: 0xF5C518))
+                    .foregroundColor(Color(hex: 0xFFD600))
             }
             .font(.system(size: 10.5, weight: .medium))
             .foregroundColor(Color(hex: 0x9AA0A9))
@@ -131,7 +131,7 @@ private struct TurboStartBanner: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "bolt.fill")
-                .foregroundColor(Color(hex: 0xF5C518))
+                .foregroundColor(Color(hex: 0xFFD600))
             VStack(alignment: .leading, spacing: 1) {
                 Text("TurboStart")
                     .font(.system(size: 11, weight: .bold))
@@ -155,7 +155,7 @@ private struct TurboStartBanner: View {
         .glassRim(cornerRadius: 12)
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color(hex: 0xF5C518).opacity(0.35), lineWidth: 1)
+                .stroke(Color(hex: 0xFFD600).opacity(0.35), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.5), radius: 14, y: 5)
         .padding(.horizontal, 60)
@@ -169,7 +169,7 @@ struct TurboButtonStyle: ButtonStyle {
             .foregroundColor(Color(hex: 0x1B1C1F))
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
-            .background(Capsule().fill(Color(hex: 0xF5C518)))
+            .background(Capsule().fill(Color(hex: 0xFFD600)))
             .opacity(configuration.isPressed ? 0.8 : 1)
     }
 }

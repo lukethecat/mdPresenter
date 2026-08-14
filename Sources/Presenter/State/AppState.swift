@@ -22,6 +22,16 @@ public enum EditorCommand {
 
 final class AppState: ObservableObject {
 
+    /// The live app instance (menus, key monitor and windows share it).
+    static let shared = AppState()
+
+    /// Which UI region the user last interacted with — arrow keys follow it.
+    enum FocusRegion {
+        case editor
+        case thumbnails
+        case preview
+    }
+
     @Published var text: String = "" {
         didSet { if text != oldValue { scheduleParse() } }
     }
@@ -32,6 +42,7 @@ final class AppState: ObservableObject {
     @Published var documentURL: URL?
 
     @Published var currentSlide = 0
+    @Published var activeRegion: FocusRegion = .editor
     @Published var showThumbnails = true
     @Published var showPreview = true
     @Published var showInspector = true
@@ -144,11 +155,12 @@ final class AppState: ObservableObject {
 
     // MARK: Slide navigation
 
+    /// Select a slide without stealing keyboard focus — the region the user
+    /// last clicked keeps the arrow keys (see the key monitor in AppDelegate).
     func selectSlide(_ index: Int) {
         guard deck.contents.indices.contains(index) else { return }
         currentSlide = index
         editorCommand.send(.scrollToSlide(index))
-        editorCommand.send(.focusEditor)
     }
 
     func setCursorSlide(_ index: Int) {
@@ -220,7 +232,15 @@ final class AppState: ObservableObject {
     // MARK: Presentation
 
     func startPresentation() {
-        guard !deck.contents.isEmpty else { return }
+        guard !deck.contents.isEmpty else {
+            // Never fail silently: explain why there is nothing to present.
+            let alert = NSAlert()
+            alert.messageText = "还没有幻灯片"
+            alert.informativeText = "先写下一个标题（`# 标题`），或导入一段文本，然后再上台。"
+            alert.alertStyle = .informational
+            alert.runModal()
+            return
+        }
         presenterIndex = currentSlide
         isPresenting = true
         PresenterWindowController.shared.present(state: self)

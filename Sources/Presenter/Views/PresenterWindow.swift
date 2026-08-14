@@ -334,10 +334,15 @@ final class PresenterWindowController {
     private var keyMonitor: Any?
     private weak var state: AppState?
 
+    /// Exposed for tests / diagnostics.
+    var isWindowVisible: Bool { window?.isVisible ?? false }
+
     func present(state: AppState) {
         self.state = state
         if window == nil {
-            let screen = NSScreen.screens.first(where: { $0 != NSScreen.main }) ?? NSScreen.main
+            let screen = NSScreen.screens.first(where: { $0 != NSScreen.main })
+                ?? NSScreen.main
+                ?? NSScreen.screens.first
             let frame = screen?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
 
             let root = PresenterView().environmentObject(state)
@@ -354,7 +359,9 @@ final class PresenterWindowController {
             win.hasShadow = false
             win.isReleasedWhenClosed = false
             win.title = "Presenter — 演讲者视图"
-            win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            // `.fullScreenAuxiliary` would silently block toggleFullScreen —
+            // use `.fullScreenPrimary` so the presenter can own a Space.
+            win.collectionBehavior = [.canJoinAllSpaces, .fullScreenPrimary]
             window = win
 
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -378,10 +385,26 @@ final class PresenterWindowController {
                 return event
             }
         }
-        window?.makeKeyAndOrderFront(nil)
+
+        guard let window = window else { return }
+        window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        if !(window?.styleMask.contains(.fullScreen) ?? false) {
-            window?.toggleFullScreen(nil)
+        if !window.isVisible {
+            window.orderFrontRegardless()
+        }
+
+        // Go fullscreen on the next runloop tick; if the system refuses,
+        // fall back to covering the whole screen with the borderless frame.
+        DispatchQueue.main.async { [weak self, weak state] in
+            guard let window = self?.window, let state = state,
+                  state.isPresenting, !window.styleMask.contains(.fullScreen) else { return }
+            window.toggleFullScreen(nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self, weak state] in
+                guard let window = self?.window, let state = state,
+                      state.isPresenting, !window.styleMask.contains(.fullScreen),
+                      let screen = window.screen ?? NSScreen.main else { return }
+                window.setFrame(screen.frame, display: true)
+            }
         }
     }
 

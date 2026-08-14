@@ -6,7 +6,7 @@ import PresenterCore
 
 @main
 struct PresenterApp: App {
-    @StateObject private var state = AppState()
+    private let state = AppState.shared
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
@@ -72,16 +72,51 @@ struct PresenterApp: App {
 // MARK: - App delegate
 //
 // Makes `swift run` behave like a real app: regular activation policy,
-// frontmost window, quit on last window close.
+// frontmost window, quit on last window close. Also routes the arrow keys
+// to whichever region the user last interacted with.
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        installRegionKeyMonitor()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    /// Region-aware arrow keys: after interacting with the thumbnails or
+    /// the preview, ↑/↓ move between slides instead of moving the editor
+    /// caret. Text controls always keep their own keys.
+    private func installRegionKeyMonitor() {
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let state = AppState.shared
+            guard !state.isPresenting else { return event }
+
+            // A text control owns the keyboard — hands off.
+            if let responder = NSApp.keyWindow?.firstResponder as? NSView,
+               responder is NSTextView || responder is NSTextField {
+                return event
+            }
+
+            switch state.activeRegion {
+            case .thumbnails, .preview:
+                switch event.keyCode {
+                case 126: // ↑
+                    state.selectSlide(max(0, state.currentSlide - 1))
+                    return nil
+                case 125: // ↓
+                    state.selectSlide(min(state.slideCount - 1, state.currentSlide + 1))
+                    return nil
+                default:
+                    break
+                }
+            case .editor:
+                break
+            }
+            return event
+        }
     }
 }
 
@@ -167,7 +202,7 @@ struct MainToolbar: ToolbarContent {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 5)
             }
-            .buttonStyle(GlassButtonStyle(accent: true, accentColor: Color(hex: 0x3B82F6)))
+            .buttonStyle(GlassButtonStyle(accent: true, accentColor: Color(LiquidGlassPalette.systemBlue)))
             .help("播放演示 (⌥⌘P)")
         }
     }

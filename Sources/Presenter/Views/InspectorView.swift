@@ -68,7 +68,7 @@ private struct TextTab: View {
                                 HStack(alignment: .top, spacing: 7) {
                                     Image(systemName: icon(for: block.kind))
                                         .font(.system(size: 10))
-                                        .foregroundColor(Color(hex: 0xF5C518))
+                                        .foregroundColor(Color(hex: 0xFFD600))
                                         .frame(width: 14)
                                     Text(block.plainText.isEmpty ? block.alt : block.plainText)
                                         .font(.system(size: 11))

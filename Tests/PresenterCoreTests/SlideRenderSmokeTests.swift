@@ -81,4 +81,39 @@ final class SlideRenderSmokeTests: XCTestCase {
             }
         }
     }
+
+    /// Regression test for "点击演示无反应": the presenter window must
+    /// actually become visible when presentation starts.
+    func testPresenterWindowOpens() throws {
+        let state = AppState()
+        state.reparse()
+        XCTAssertFalse(state.deck.contents.isEmpty, "sample deck should have slides")
+
+        state.startPresentation()
+        XCTAssertTrue(state.isPresenting)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+
+        XCTAssertTrue(
+            PresenterWindowController.shared.isWindowVisible,
+            "presenter window should be visible after startPresentation"
+        )
+
+        state.stopPresentation()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        XCTAssertFalse(state.isPresenting)
+        XCTAssertFalse(PresenterWindowController.shared.isWindowVisible)
+    }
+
+    /// Region-aware arrow navigation: selecting in the thumbnails region
+    /// moves between slides without touching the editor's caret.
+    func testRegionNavigationMovesSlides() throws {
+        let state = AppState()
+        state.reparse()
+        state.activeRegion = .thumbnails
+        let before = state.currentSlide
+        state.selectSlide(min(state.slideCount - 1, before + 1))
+        XCTAssertEqual(state.currentSlide, before + 1)
+        state.selectSlide(max(0, state.currentSlide - 1))
+        XCTAssertEqual(state.currentSlide, before)
+    }
 }

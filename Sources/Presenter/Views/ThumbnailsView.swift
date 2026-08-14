@@ -24,21 +24,35 @@ struct ThumbnailsView: View {
 
                 Divider().background(Color.white.opacity(0.07))
 
-                ScrollView {
-                    LazyVStack(spacing: 14) {
-                        ForEach(state.deck.contents.indices, id: \.self) { index in
-                            ThumbnailCell(
-                                content: state.deck.contents[index],
-                                isCurrent: index == state.currentSlide,
-                                onSelect: { state.selectSlide(index) }
-                            )
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 14) {
+                            ForEach(state.deck.contents.indices, id: \.self) { index in
+                                ThumbnailCell(
+                                    content: state.deck.contents[index],
+                                    isCurrent: index == state.currentSlide,
+                                    onSelect: {
+                                        state.activeRegion = .thumbnails
+                                        state.selectSlide(index)
+                                    }
+                                )
+                                .id(index)
+                            }
                         }
+                        .padding(12)
                     }
-                    .padding(12)
+                    // Follow the selection only while this region is active.
+                    .onChange(of: state.currentSlide) { newValue in
+                        guard state.activeRegion == .thumbnails else { return }
+                        proxy.scrollTo(newValue, anchor: .center)
+                    }
                 }
             }
         }
         .padding(10)
+        .simultaneousGesture(
+            TapGesture().onEnded { state.activeRegion = .thumbnails }
+        )
     }
 }
 

@@ -27,6 +27,9 @@ struct SlidePreviewPanel: View {
             of: [UTType.image.identifier, UTType.fileURL.identifier],
             delegate: MediaDropDelegate(state: state, isTargeted: $isDropTargeted)
         )
+        .simultaneousGesture(
+            TapGesture().onEnded { state.activeRegion = .preview }
+        )
     }
 
     private var header: some View {
@@ -92,7 +95,7 @@ struct SlidePreviewPanel: View {
             .overlay(
                 isDropTargeted
                     ? RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color(hex: 0x3B82F6), style: StrokeStyle(lineWidth: 2, dash: [6]))
+                        .stroke(Color(LiquidGlassPalette.systemBlue), style: StrokeStyle(lineWidth: 2, dash: [6]))
                         .padding(12)
                     : nil
             )

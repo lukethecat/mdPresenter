@@ -24,9 +24,11 @@
 
 **Color Shift** —— 编辑器光标、幻灯片标题、缩略图与进度条的颜色随演示进度沿传统颜料渐变：**靛青（冷启动）→ 黛紫（预热）→ 朱砂（高潮）→ 琥珀（收尾）→ 鎏金（余韵）**。
 
-**Liquid Glass** —— 窗口**默认就是透明的**：没有黑色底板，macOS 26+ 上使用系统原生的 `glassEffect`（可着色、可交互，与 Apple 新版 iWork 套件同款），桌面与光线从玻璃后面透进来；macOS 11–25 自动降级为 `NSVisualEffectView` 模糊玻璃。缩略图、预览、检查器、状态栏、TurboStart 横幅、工具栏按钮、编辑器本体与演讲者视图侧栏全部浮在玻璃上。
+**Liquid Glass（调研自 Apple HIG 与 hig-mcp 设计令牌）** —— 窗口**默认就是透明的**：macOS 26+ 使用系统原生 `glassEffect`（可着色、可交互），桌面与光线透过半透明墨色水幕折射进来；macOS 11–25 降级为 `NSVisualEffectView`。设计严格遵循已核实的 Liquid Glass 约束：**每屏合成层 ≤4**、软霜雾（大半径软渐变，不做硬模糊）、**对比度按模糊后实测**（浅色幻灯片自动加深玻璃纱幕）、**Reduce Transparency 时自动切换实底**。系统色全面更新为 post-WWDC25 调色板（`systemBlue #0088FF/#0091FF`、`systemYellow #FFD600`）。
 
-**流动的生命感** —— 窗口背景**本身就是当前幻灯片的颜料色**：一层着色水幕 + 五团纯净颜料光斑（纯色、提亮、加深三种水样变体），以 24fps 沿缓慢的李萨如轨迹漂移，像水在玻璃界面上流动（macOS 12+ `TimelineView` 驱动；macOS 11 为静态色场）。翻页或切换主题时整套调色板用 1.5 秒缓动融为一体，水幕的渐变方向也在缓慢旋转。玻璃面板会**感知幻灯片明暗**：浅色幻灯片（瓷白、琉璃金）自动加深玻璃保证文字可读，深色幻灯片（石青、宫墙红）保持清澈透亮。演讲者视图的舞台同样随幻灯片底色呼吸。颜色从来不是静态皮肤，而是内容的一部分。
+**流动的生命感** —— 背景水体取自 **macOS Tahoe 官方壁纸的实测采样**（Mac Blue 的蔚蓝 `#4A9CEE`、青 `#6AD5F6`、薰衣草 `#AC9CE6`、长春花蓝 `#ACD5F6`，Chroma Blue 的墨蓝 `#0A1226`）：三条水带以 24fps 沿李萨如轨迹缓慢漂移（macOS 12+ `TimelineView`；macOS 11 静态），当前幻灯片的传统颜料以低透明度作为「低语」混入水体——主题仍在呼吸，但质感是 Tahoe 的高级玻璃。翻页/切主题时 1.5 秒缓动融为一体。
+
+**区域感知的方向键** —— 交互哪个区域，方向键就控制哪个区域：点击缩略图栏或预览后，↑↓ 切换幻灯片（列表自动跟随滚动）；点击编辑器后，↑↓ 依旧移动文字光标。文本输入框永远保留自己的按键。
 
 ---
 
@@ -36,7 +38,7 @@
 # 运行（SwiftUI 窗口直接打开）
 swift run Presenter
 
-# 运行测试（47 个，含像素级设计验证）
+# 运行测试（49 个，含像素级设计验证与演讲者窗口冒烟）
 swift test
 
 # 打包成可双击的 .app（生成于 .build/release/Presenter.app）
@@ -100,8 +102,11 @@ Sources/
 **核心设计决策**：
 - 幻灯片渲染器 `SlideCanvas` 的所有尺寸都从画布几何推导（百分比 + 二分搜索字号自适应），因此同一视图可从 120pt 缩略图无缝放大到投影仪与 PDF 页面。
 - 编辑器用 `NSLayoutManager` 的临时属性做语法着色，不改动底层纯文本存储，撤销/保存始终干净。
-- Liquid Glass 用 `if #available(macOS 26.0, *)` 分流：新系统走系统原生 `glassEffect(.tint()/.interactive())`，旧系统走 `NSVisualEffectView` 近似，两者共享同一套高光描边（`glassRim`）。
-- Core 层不依赖 SwiftUI，47 个测试覆盖分页、解析、内容分离、TurboStart、进度色、时长估算、文档序列化，以及**像素级的传统色渲染断言**（石青/石绿/琉璃金/宫墙红/钴蓝/天青渐变）。
+- Liquid Glass 用 `if #available(macOS 26.0, *)` 分流：新系统走系统原生 `glassEffect(.tint()/.interactive())`，旧系统走 `NSVisualEffectView` 近似，两者共享同一套高光描边（`glassRim`）；`FluidBackground` 遵循「≤4 层、软霜雾、模糊后对比、Reduce Transparency 实底」的 HIG 玻璃约束。
+- 区域焦点系统：`AppDelegate` 的键盘监视器按「最后交互区域 + 是否文本控件持有焦点」路由方向键，侧栏/预览/编辑器各自独立。
+- Core 层不依赖 SwiftUI，49 个测试覆盖分页、解析、内容分离、TurboStart、进度色、时长估算、文档序列化、**像素级的传统色渲染断言**（石青/石绿/琉璃金/宫墙红/钴蓝/天青渐变），以及**演讲者窗口可见性**冒烟。
+
+**设计调研来源**：[hig-mcp](https://github.com/aka-kika/hig-mcp)（Apple HIG 结构化设计令牌：post-WWDC25 系统色、Liquid Glass 约束）；macOS Tahoe 系统壁纸实测采样（`/System/Library/Desktop Pictures` 的 Mac Blue / Chroma Blue）；[Apple Liquid Glass 设计发布](https://images.apple.com/om/newsroom/2025/06/apple-introduces-a-delightful-and-elegant-new-software-design/)。
 
 ## 快捷键
 
@@ -114,6 +119,7 @@ Sources/
 | ⌥⌘P | 播放 / 停止演示 |
 | ← → 空格（演示中） | 上一张 / 下一张 |
 | Esc（演示中） | 停止演示 |
+| ↑ ↓（缩略图栏/预览聚焦时） | 切换幻灯片（编辑器内仍移动光标） |
 | ⌘N / ⇧⌘N / ⌘O / ⌘S / ⌘E | 新建 / 空白 / 打开 / 保存 / 导出 PDF |
 
 ## 开源
