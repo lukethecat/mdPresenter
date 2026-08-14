@@ -23,8 +23,12 @@ public struct SlideSplitter {
         var emptyRun = 0
 
         func flush() {
+            // 只裁剪换行（分隔符留下的空行）。绝不能裁剪空白字符：
+            // 首行是 Tab 缩进的可见文本时（空白文档第一句就按 Tab 的
+            // 场景），whitespacesAndNewlines 会把前导 Tab 一起剥掉，
+            // 导致上屏文本静默掉进演讲备注。
             let source = current.joined(separator: "\n")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: .newlines)
             if !source.isEmpty {
                 slides.append(Slide(source: source, startLine: startLine, lineCount: current.count))
             }

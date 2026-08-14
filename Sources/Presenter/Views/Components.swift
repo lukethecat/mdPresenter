@@ -264,17 +264,22 @@ struct FluidBackground: View {
 
                 if !reduceTransparency {
                     // Water ribbons carrying the environment's colors.
-                    let n = max(1, waterColors.count)
-                    blob(waterColors[0 % n], time, speed: 0.09, phase: 0.0, size: w * 0.78, opacity: 0.30, at: CGPoint(x: w * 0.26, y: h * 0.32))
-                    blob(waterColors[1 % n], time, speed: 0.07, phase: 2.4, size: w * 0.62, opacity: 0.26, at: CGPoint(x: w * 0.76, y: h * 0.68))
-                    blob(waterColors[2 % n], time, speed: 0.11, phase: 4.1, size: w * 0.55, opacity: 0.24, at: CGPoint(x: w * 0.6, y: h * 0.22))
-                    blob(waterColors[3 % n], time, speed: 0.06, phase: 1.3, size: w * 0.5, opacity: 0.20, at: CGPoint(x: w * 0.32, y: h * 0.82))
+                    // (safe accessor: never crash even if the palette is empty)
+                    blob(waterColor(at: 0), time, speed: 0.09, phase: 0.0, size: w * 0.78, opacity: 0.30, at: CGPoint(x: w * 0.26, y: h * 0.32))
+                    blob(waterColor(at: 1), time, speed: 0.07, phase: 2.4, size: w * 0.62, opacity: 0.26, at: CGPoint(x: w * 0.76, y: h * 0.68))
+                    blob(waterColor(at: 2), time, speed: 0.11, phase: 4.1, size: w * 0.55, opacity: 0.24, at: CGPoint(x: w * 0.6, y: h * 0.22))
+                    blob(waterColor(at: 3), time, speed: 0.06, phase: 1.3, size: w * 0.5, opacity: 0.20, at: CGPoint(x: w * 0.32, y: h * 0.82))
 
                     // The progress pigment — a slow accent breathing.
                     blob(accentColor, time, speed: 0.06, phase: 3.0, size: w * 0.28, opacity: 0.12, at: CGPoint(x: w * 0.14, y: h * 0.12))
                 }
             }
         }
+    }
+
+    private func waterColor(at index: Int) -> Color {
+        guard !waterColors.isEmpty else { return Color.clear }
+        return waterColors[index % waterColors.count]
     }
 
     private func blob(
