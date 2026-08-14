@@ -57,18 +57,22 @@ func paint(_ path: CGPath) {
     ctx.restoreGState()
 }
 
-// 3a. 圆点（Markdown 列表符）。
-let dotR: CGFloat = 118
-let dotRect = CGRect(x: 294 - dotR, y: 512 - dotR, width: dotR * 2, height: dotR * 2)
+// 3a. 圆点（Markdown 句点）——像文本里的句号：缩小、沉到基线位置，
+//     与 ">" 组成终端字符般的 ".>" 符号。
+let dotR: CGFloat = 88
+// 注意：NSBitmapImageRep 上下文非翻转（y 向上），y=318 才是视觉上的下三分之一。
+let dotCenter = CGPoint(x: 292, y: 318)
+let dotRect = CGRect(x: dotCenter.x - dotR, y: dotCenter.y - dotR, width: dotR * 2, height: dotR * 2)
 paint(CGPath(ellipseIn: dotRect, transform: nil))
 
-// 3b. 右尖括 ">"（下一张幻灯片），粗圆头描边。
-let halfH: CGFloat = 250
+// 3b. 右尖括 ">"（下一张幻灯片），粗圆头描边。向左收紧、贴近圆点，
+//     整体光学居中，右缘留足安全距离（不会被圆角吃掉）。
+let halfH: CGFloat = 235
 let chevron = CGMutablePath()
-chevron.move(to: CGPoint(x: 484, y: 512 - halfH))
-chevron.addLine(to: CGPoint(x: 848, y: 512))
-chevron.addLine(to: CGPoint(x: 484, y: 512 + halfH))
-let stroked = chevron.copy(strokingWithWidth: 140, lineCap: .round, lineJoin: .round, miterLimit: 10)
+chevron.move(to: CGPoint(x: 462, y: 512 - halfH))
+chevron.addLine(to: CGPoint(x: 762, y: 512))
+chevron.addLine(to: CGPoint(x: 462, y: 512 + halfH))
+let stroked = chevron.copy(strokingWithWidth: 128, lineCap: .round, lineJoin: .round, miterLimit: 10)
 paint(stroked)
 
 NSGraphicsContext.restoreGraphicsState()
