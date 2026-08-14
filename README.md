@@ -1,5 +1,7 @@
 # mdPresenter
 
+<img src="Assets/mdPresenter-icon-1024.png" width="120" align="right" alt="mdPresenter 图标：白底上的蓝色渐变 .> 符号">
+
 以 **Markdown 为核心**的 macOS 幻灯片创作工具，致敬 [iA Presenter](https://ia.net/presenter) 的核心理念与交互，视觉上采用 **macOS 26 Tahoe / 27 Golden Gate 的 Liquid Glass 语言**：透明、流动、与环境光交互。
 
 ![MIT](https://img.shields.io/badge/license-MIT-blue)

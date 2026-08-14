@@ -28,6 +28,10 @@ mkdir -p "$APP_DIR/Contents/Resources"
 
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$BIN_NAME"
 
+# 应用图标（iA Writer 式极简：白底 + ".>" 渐变符号）。
+./scripts/make-icon.sh >/dev/null
+cp Assets/mdPresenter.icns "$APP_DIR/Contents/Resources/mdPresenter.icns"
+
 cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -47,6 +51,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
     <string>APPL</string>
     <key>CFBundleExecutable</key>
     <string>Presenter</string>
+    <key>CFBundleIconFile</key>
+    <string>mdPresenter.icns</string>
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
     <key>NSHighResolutionCapable</key>
