@@ -116,45 +116,95 @@ struct MediaBlockView: View {
 }
 
 // MARK: - Table view
+//
+// iA Presenter-style minimal table: no heavy box — a semibold header on a
+// hairline, thin row separators, proportional column widths (CJK-aware),
+// numeric cells right-aligned, and inline markdown inside cells.
 
 struct SlideTableView: View {
     let rows: [[String]]
+    var alignments: [String] = []
     var textColor: Color
     var accent: Color
     var width: CGFloat
+    var fontSize: CGFloat? = nil
+    var maxRows: Int = 12
 
     var body: some View {
         VStack(spacing: 0) {
             ForEach(0..<visibleRows.count, id: \.self) { r in
                 HStack(spacing: 0) {
                     ForEach(0..<columns, id: \.self) { c in
-                        Text(cellText(row: visibleRows[r], column: c))
-                            .font(.system(size: tableFontSize, weight: r == 0 ? .semibold : .regular))
-                            .foregroundColor(textColor)
-                            .lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, tableFontSize * 0.5)
-                            .padding(.horizontal, 8)
+                        cellView(row: visibleRows[r], column: c, isHeader: r == 0)
                     }
                 }
-                .background(r == 0 ? accent.opacity(0.16) : Color.clear)
+                .padding(.vertical, cellFont * 0.55)
                 if r < visibleRows.count - 1 {
-                    Rectangle().fill(textColor.opacity(0.18)).frame(height: 1)
+                    Rectangle()
+                        .fill(textColor.opacity(r == 0 ? 0.34 : 0.12))
+                        .frame(height: 1)
                 }
             }
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(textColor.opacity(0.3), lineWidth: 1)
-        )
     }
 
     private var columns: Int { rows.map { $0.count }.max() ?? 1 }
-    private var tableFontSize: CGFloat { max(10, min(15, width / 55)) }
-    private var visibleRows: [[String]] { Array(rows.prefix(12)) }
+    private var cellFont: CGFloat { fontSize ?? max(10, min(16, width / 48)) }
+    private var visibleRows: [[String]] { Array(rows.prefix(max(3, maxRows))) }
 
     private func cellText(row: [String], column: Int) -> String {
         column < row.count ? row[column] : ""
+    }
+
+    /// Display width with CJK glyphs counting double.
+    private func displayWidth(_ s: String) -> CGFloat {
+        s.reduce(0) { acc, ch in
+            acc + (ch.unicodeScalars.first.map { $0.value > 0x2E80 } ?? false ? 2 : 1)
+        }
+    }
+
+    /// Column widths proportional to the widest cell in each column.
+    private func columnWeights() -> [CGFloat] {
+        var weights = [CGFloat](repeating: 1, count: columns)
+        for row in rows {
+            for (c, cell) in row.enumerated() where c < columns {
+                weights[c] = max(weights[c], displayWidth(cell))
+            }
+        }
+        let total = max(1, weights.reduce(0, +))
+        return weights.map { max(0.14, $0 / total) }
+    }
+
+    private func alignment(for column: Int, cell: String) -> Alignment {
+        // Explicit iA/markdown alignment hints win; numeric cells go right.
+        if column < alignments.count {
+            switch alignments[column] {
+            case "c": return .center
+            case "r": return .trailing
+            default: break
+            }
+        }
+        let cleaned = cell.replacingOccurrences(of: ",", with: "")
+        if !cell.isEmpty, Double(cleaned) != nil { return .trailing }
+        return .leading
+    }
+
+    private func cellView(row: [String], column: Int, isHeader: Bool) -> some View {
+        let cell = cellText(row: row, column: column)
+        return InlineTextView(
+            inlines: MarkdownParser.parseInline(cell),
+            baseSize: cellFont,
+            family: "Helvetica Neue",
+            weight: isHeader ? .semibold : .regular,
+            color: textColor,
+            lineSpacing: 0
+        )
+        .lineLimit(2)
+        .frame(
+            width: width * columnWeights()[column],
+            alignment: alignment(for: column, cell: cell)
+        )
+        .padding(.horizontal, 8)
     }
 }
 
@@ -550,12 +600,20 @@ struct SlideCanvas: View {
     private func tableLayout(width: CGFloat, height: CGFloat) -> some View {
         let table = content.onSlide.first { $0.kind == .table }
         let headline = content.headline?.plainText ?? ""
+        let tableWidth = width * 0.84
+        // Scale the table to the canvas: the headline gets up to ~22% of
+        // the height, the table the rest — rows are capped so it never
+        // overflows the slide.
+        let cellFont = max(10, min(16, tableWidth / 44))
+        let headlineBudget = headline.isEmpty ? 0 : height * 0.24
+        let tableBudget = height * 0.62 - headlineBudget
+        let maxRows = max(2, Int(tableBudget / (cellFont * 2.3)))
         return VStack(alignment: .leading, spacing: height * 0.03) {
             if !headline.isEmpty {
                 let size = LayoutEngine.fitFontSize(
                     text: headline, family: style.headlineFamily, weight: style.headlineWeight,
                     maxSize: width / 8, minSize: 16,
-                    in: CGSize(width: width * 0.84, height: height * 0.22)
+                    in: CGSize(width: tableWidth, height: headlineBudget * 0.9)
                 )
                 InlineTextView(
                     inlines: content.headline?.inlines ?? [],
@@ -568,11 +626,14 @@ struct SlideCanvas: View {
             }
             SlideTableView(
                 rows: table?.rows ?? [],
+                alignments: table?.columnAlignments ?? [],
                 textColor: Color(style.textColor),
                 accent: Color(style.accent),
-                width: width * 0.84
+                width: tableWidth,
+                fontSize: cellFont,
+                maxRows: maxRows
             )
-            .frame(width: width * 0.84)
+            .frame(width: tableWidth)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(.vertical, height * 0.08)

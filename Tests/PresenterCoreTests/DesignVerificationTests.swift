@@ -182,4 +182,37 @@ final class DesignVerificationTests: XCTestCase {
             "headline should render at display size, not body size"
         )
     }
+
+    /// The sample deck's table slide (「数据一目了然」) must render its
+    /// table with real content — headline + table rows on a gradient.
+    func testTableSlideRenders() throws {
+        let state = AppState()
+        state.settings.themeId = "glass"
+        state.settings.colorMode = .dark
+        state.reparse()
+        // Slide 5 (index 4, 「数据一目了然」) is the sample deck's table slide.
+        guard state.deck.contents.indices.contains(4) else {
+            return XCTFail("sample deck should have a table slide")
+        }
+        let content = state.deck.contents[4]
+        XCTAssertEqual(content.layout, .table)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+
+        let image = ExportCoordinator.renderSlide(
+            content: content,
+            style: state.slideStyle(for: content),
+            state: state,
+            size: CGSize(width: 1280, height: 720)
+        )
+        guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else {
+            return XCTFail("no bitmap")
+        }
+        // Headline + table text must be visible.
+        XCTAssertGreaterThan(whitePixelCount(rep), 800, "table slide should show text")
+        // The gradient backdrop must still be present (top vs bottom differ).
+        if let top = pixel(rep, rep.pixelsWide / 2, 6),
+           let bottom = pixel(rep, rep.pixelsWide / 2, rep.pixelsHigh - 6) {
+            XCTAssertGreaterThan(distance(top, bottom), 0.05, "gradient backdrop missing")
+        }
+    }
 }

@@ -50,6 +50,7 @@ public struct MarkdownParser {
 
             // Table (needs a following separator row)
             if line.contains("|") && i + 1 < lines.count && isTableSeparator(lines[i + 1]) {
+                let alignments = parseTableAlignments(lines[i + 1])
                 var rows: [[String]] = [splitTableRow(line)]
                 i += 2
                 while i < lines.count {
@@ -63,6 +64,7 @@ public struct MarkdownParser {
                 }
                 var block = Block(kind: .table)
                 block.rows = rows
+                block.columnAlignments = alignments
                 blocks.append(block)
                 continue
             }
@@ -205,12 +207,17 @@ public struct MarkdownParser {
     static func isBareImageLine(_ line: String) -> Bool {
         let lower = line.lowercased()
         if lower.hasPrefix("media://") { return true }
-        let hasImageExtension = lower.range(
+        // URLs may carry query strings/fragments — check the path part.
+        var path = lower
+        if let q = path.firstIndex(of: "?") { path = String(path[..<q]) }
+        if let f = path.firstIndex(of: "#") { path = String(path[..<f]) }
+        let hasImageExtension = path.range(
             of: "\\.(png|jpe?g|gif|webp|svg|tiff?|heic|avif|bmp)$",
             options: .regularExpression
         ) != nil
         guard hasImageExtension else { return false }
-        return lower.hasPrefix("http://") || lower.hasPrefix("https://") || line.hasPrefix("/") || line.hasPrefix(".")
+        return path.hasPrefix("http://") || path.hasPrefix("https://")
+            || line.hasPrefix("/") || line.hasPrefix(".")
     }
 
     /// iA Presenter image metadata lines (`x:`, `y:`, `size:`, `title:`, …)
@@ -274,6 +281,21 @@ public struct MarkdownParser {
         if t.hasPrefix("|") { t.removeFirst() }
         if t.hasSuffix("|") { t.removeLast() }
         return t.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
+    /// Column alignments from the separator row (`|:---|`, `|---:|`, `|:---:|`).
+    static func parseTableAlignments(_ separator: String) -> [String] {
+        var t = separator.trimmingCharacters(in: .whitespaces)
+        if t.hasPrefix("|") { t.removeFirst() }
+        if t.hasSuffix("|") { t.removeLast() }
+        return t.components(separatedBy: "|").map { cell in
+            let s = cell.trimmingCharacters(in: .whitespaces)
+            let left = s.hasPrefix(":")
+            let right = s.hasSuffix(":")
+            if left && right { return "c" }
+            if right { return "r" }
+            return "l"
+        }
     }
 
     static func parseStandaloneImage(_ line: String) -> Block? {

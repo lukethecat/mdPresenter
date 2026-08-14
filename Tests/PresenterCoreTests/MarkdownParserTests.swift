@@ -66,6 +66,27 @@ final class MarkdownParserTests: XCTestCase {
         XCTAssertEqual(blocks[0].mediaId, "cat-1")
     }
 
+    func testTableAlignmentHints() {
+        let blocks = MarkdownParser.parseBlocks("| A | B |\n|:---:|---:|\n| 1 | 2 |")
+        XCTAssertEqual(blocks[0].kind, .table)
+        XCTAssertEqual(blocks[0].columnAlignments, ["c", "r"])
+    }
+
+    func testBareImageURLWithQueryString() {
+        let blocks = MarkdownParser.parseBlocks("https://example.com/photo.png?w=800#frag")
+        XCTAssertEqual(blocks.count, 1)
+        XCTAssertEqual(blocks[0].kind, .image)
+        XCTAssertEqual(blocks[0].mediaRef, "https://example.com/photo.png?w=800#frag")
+    }
+
+    func testTableCellsSupportInlineMarkup() {
+        let blocks = MarkdownParser.parseBlocks("| A | B |\n|---|---|\n| **bold** | `code` |")
+        XCTAssertEqual(blocks[0].rows[1][0], "**bold**")
+        // Cell content keeps raw text; renderer parses inlines per cell.
+        let inlines = MarkdownParser.parseInline(blocks[0].rows[1][0])
+        XCTAssertEqual(inlines.plainText, "bold")
+    }
+
     func testTabbedParagraphGoesOnSlide() {
         let blocks = MarkdownParser.parseBlocks("\tThis line must appear on the slide")
         XCTAssertEqual(blocks.count, 1)

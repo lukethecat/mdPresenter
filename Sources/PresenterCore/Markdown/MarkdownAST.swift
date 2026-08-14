@@ -58,6 +58,8 @@ public struct Block: Equatable {
     public var language: String = ""
     /// For tables: grid of cells, first row is the header.
     public var rows: [[String]] = []
+    /// For tables: per-column alignment from the separator row ("l"/"c"/"r").
+    public var columnAlignments: [String] = []
     /// True when the paragraph was explicitly forced onto the slide with a leading tab.
     public var isTabbedOnSlide: Bool = false
     /// iA Presenter image metadata (`x:`, `y:`, `size:`, `title:`, …).
