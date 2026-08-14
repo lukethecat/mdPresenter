@@ -232,6 +232,16 @@ struct EditorView: NSViewRepresentable {
         private var cancellables = Set<AnyCancellable>()
         private var lastSlideIndex: Int = -1
 
+        /// 缓存的行内样式正则（ICU，编译一次；避免逐行重复编译）。
+        private enum InlinePatterns {
+            static let bold = try! NSRegularExpression(pattern: "(\\*\\*)(.+?)(\\*\\*)")
+            static let italic = try! NSRegularExpression(pattern: "(?<!\\*)(\\*)([^*\\n]+?)(\\*)(?!\\*)")
+            static let code = try! NSRegularExpression(pattern: "(`)([^`\\n]+?)(`)")
+            // 注意：旧版此正则多一个右括号、从未生效过（try? 静默吞错）。
+            static let link = try! NSRegularExpression(pattern: "(\\[)([^\\]]+?)(\\]\\([^)]*\\))")
+            static let list = try! NSRegularExpression(pattern: "^([ \\t]*(?:[-*+]|\\d+\\.)\\s)")
+        }
+
         init(state: AppState) {
             self.state = state
         }
@@ -482,15 +492,13 @@ struct EditorView: NSViewRepresentable {
                 ?? bodyFont
             let boldFontB = NSFontManager.shared.convert(boldFont, toHaveTrait: .boldFontMask)
 
-            func applyPattern(_ pattern: String, markerLen: Int, attributes: [NSAttributedString.Key: Any], contentAttributes: [NSAttributedString.Key: Any] = [:]) {
-                guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+            func applyPattern(_ regex: NSRegularExpression, attributes: [NSAttributedString.Key: Any], contentAttributes: [NSAttributedString.Key: Any] = [:]) {
                 let matches = regex.matches(in: line, range: NSRange(location: 0, length: (line as NSString).length))
                 for match in matches.reversed() {
                     guard match.numberOfRanges >= 3 else { continue }
                     let marker1 = NSRange(location: lineRange.location + match.range(at: 1).location, length: match.range(at: 1).length)
                     let content = NSRange(location: lineRange.location + match.range(at: 2).location, length: match.range(at: 2).length)
                     let marker2 = NSRange(location: lineRange.location + match.range(at: 3).location, length: match.range(at: 3).length)
-                    _ = markerLen
                     lm.addTemporaryAttribute(.foregroundColor, value: dimColor, forCharacterRange: marker1)
                     lm.addTemporaryAttribute(.foregroundColor, value: dimColor, forCharacterRange: marker2)
                     for (key, value) in contentAttributes {
@@ -504,33 +512,32 @@ struct EditorView: NSViewRepresentable {
 
             // Bold **…**
             applyPattern(
-                "(\\*\\*)(.+?)(\\*\\*)", markerLen: 2,
+                Self.InlinePatterns.bold,
                 attributes: [.font: boldFontB, .foregroundColor: EditorChrome.heading]
             )
             // Italic *…*
             applyPattern(
-                "(?<!\\*)(\\*)([^*\\n]+?)(\\*)(?!\\*)", markerLen: 1,
+                Self.InlinePatterns.italic,
                 attributes: [.obliqueness: 0.18]
             )
             // Inline code `…`
             applyPattern(
-                "(`)([^`\\n]+?)(`)", markerLen: 1,
+                Self.InlinePatterns.code,
                 attributes: [.foregroundColor: EditorChrome.amber],
                 contentAttributes: [.backgroundColor: NSColor.white.withAlpha(0.06)]
             )
             // Links [text](url)
             applyPattern(
-                "(\\[)([^\\]]+?)(\\]\\()[^)]*\\))", markerLen: 1,
+                Self.InlinePatterns.link,
                 attributes: [.foregroundColor: NSColor(hex: 0x7FB4FF), .underlineStyle: NSUnderlineStyle.single.rawValue]
             )
 
             // List markers dim.
-            if let regex = try? NSRegularExpression(pattern: "^([ \\t]*(?:[-*+]|\\d+\\.)\\s)") {
-                let range = NSRange(location: 0, length: (line as NSString).length)
-                if let match = regex.firstMatch(in: line, range: range), match.numberOfRanges >= 2 {
-                    let marker = NSRange(location: lineRange.location + match.range(at: 1).location, length: match.range(at: 1).length)
-                    lm.addTemporaryAttribute(.foregroundColor, value: dimColor, forCharacterRange: marker)
-                }
+            let listRegex = Self.InlinePatterns.list
+            let range = NSRange(location: 0, length: (line as NSString).length)
+            if let match = listRegex.firstMatch(in: line, range: range), match.numberOfRanges >= 2 {
+                let marker = NSRange(location: lineRange.location + match.range(at: 1).location, length: match.range(at: 1).length)
+                lm.addTemporaryAttribute(.foregroundColor, value: dimColor, forCharacterRange: marker)
             }
 
             // Tab marker (forces text onto the slide).

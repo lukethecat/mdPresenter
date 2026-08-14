@@ -247,12 +247,26 @@ final class AppState: ObservableObject {
         guard let attachment = media.first(where: { $0.id == id }) else { return }
         media.removeAll { $0.id == id }
         // Strip image lines referencing this attachment.
-        let pattern = "!\\[[^\\]]*\\]\\(\(NSRegularExpression.escapedPattern(for: attachment.markdownRef))\\)\\n?"
-        let stripped = text.replacingOccurrences(
-            of: pattern,
-            with: "",
-            options: .regularExpression
-        )
+        // 直接用字符串替换（避免 String 正则引擎，见 MarkdownParser 注释）。
+        let ref = attachment.markdownRef
+        var stripped = text
+        while let range = stripped.range(of: "![") {
+            guard let close = stripped[range.upperBound...].firstIndex(of: "]") else { break }
+            let after = stripped.index(after: close)
+            if after < stripped.endIndex, stripped[after] == "(",
+               let paren = stripped[after...].firstIndex(of: ")") {
+                let inner = stripped[stripped.index(after: after)..<paren]
+                if inner == ref {
+                    var lineEnd = stripped.index(after: paren)
+                    if lineEnd < stripped.endIndex, stripped[lineEnd] == "\n" {
+                        lineEnd = stripped.index(after: lineEnd)
+                    }
+                    stripped.removeSubrange(range.lowerBound..<lineEnd)
+                    continue
+                }
+            }
+            break
+        }
         if stripped != text {
             text = stripped
             editorCommand.send(.replaceText(stripped))

@@ -265,8 +265,17 @@ public struct MarkdownParser {
         return false
     }
 
+    /// Supported image extensions (iA images list + a few extras).
+    static let imageExtensions: Set<String> = [
+        "png", "apng", "jpg", "jpeg", "gif", "webp", "svg",
+        "tif", "tiff", "heic", "avif", "bmp",
+    ]
+
     /// iA Presenter: a bare image URL or local path on its own line is a
     /// visible image (https://…/a.png, /assets/photo.jpg, media://…).
+    /// 注意：绝不能用 String.range(of:.regularExpression)——Swift 正则
+    /// 引擎在 macOS 27 上对该模式会陷入编译死循环（spindump 实证，
+    /// 主线程 99% CPU + 数 GB 内存）。这里用纯字符串 + 集合判断。
     static func isBareImageLine(_ line: String) -> Bool {
         let lower = line.lowercased()
         if lower.hasPrefix("media://") { return true }
@@ -274,13 +283,12 @@ public struct MarkdownParser {
         var path = lower
         if let q = path.firstIndex(of: "?") { path = String(path[..<q]) }
         if let f = path.firstIndex(of: "#") { path = String(path[..<f]) }
-        let hasImageExtension = path.range(
-            of: "\\.(png|jpe?g|gif|webp|svg|tiff?|heic|avif|bmp)$",
-            options: .regularExpression
-        ) != nil
-        guard hasImageExtension else { return false }
-        return path.hasPrefix("http://") || path.hasPrefix("https://")
+        guard path.hasPrefix("http://") || path.hasPrefix("https://")
             || line.hasPrefix("/") || line.hasPrefix(".")
+        else { return false }
+        let ext = (path as NSString).pathExtension.lowercased()
+        guard !ext.isEmpty else { return false }
+        return imageExtensions.contains(ext)
     }
 
     /// iA Presenter image metadata lines (`x:`, `y:`, `size:`, `title:`, …)
@@ -356,15 +364,14 @@ public struct MarkdownParser {
         return text.isEmpty ? nil : text
     }
 
-    /// HTML image tag: `<img src="…">`
+    /// HTML image tag: `<img src="…">`（纯字符串解析，避免 Swift 正则引擎）
     static func parseHTMLImage(_ line: String) -> Block? {
-        guard line.lowercased().hasPrefix("<img") else { return nil }
-        guard let srcRange = line.range(
-            of: #"src="[^"]+""#,
-            options: [.regularExpression, .caseInsensitive]
-        ) else { return nil }
-        var src = String(line[srcRange])
-        src = String(src.dropFirst(5).dropLast()) // strip src=" and "
+        let lower = line.lowercased()
+        guard lower.hasPrefix("<img") else { return nil }
+        guard let keyRange = lower.range(of: "src=\"") else { return nil }
+        let rest = line[keyRange.upperBound...]
+        guard let close = rest.firstIndex(of: "\"") else { return nil }
+        let src = String(rest[..<close])
         guard !src.isEmpty else { return nil }
         var block = Block(kind: .image)
         block.mediaRef = src

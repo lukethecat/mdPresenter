@@ -17,11 +17,16 @@ public struct TurboStart {
     }
 
     /// Decide whether the text already contains slide separators.
+    /// 不用 Swift String.range(of:.regularExpression)（同 isBareImageLine
+    /// 的死循环问题）——逐行手工判断 `---` 规则即可。
     public static func hasSeparators(_ text: String) -> Bool {
         let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
-        if normalized.range(of: "\n[ \\t]*---+[ \\t]*\n", options: .regularExpression) != nil { return true }
         if normalized.contains("\n\n\n") { return true }
+        for line in normalized.components(separatedBy: "\n") {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            if t.count >= 3, t.allSatisfy({ $0 == "-" }) { return true }
+        }
         return false
     }
 
