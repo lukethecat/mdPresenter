@@ -101,6 +101,12 @@ public struct MarkdownParser {
                 var block = Block(kind: .table)
                 block.rows = rows
                 block.columnAlignments = alignments
+                // iA table caption: a [Caption] line directly below the table.
+                if i < lines.count,
+                   let caption = tableCaption(lines[i]) {
+                    block.metadata["caption"] = caption
+                    i += 1
+                }
                 blocks.append(block)
                 continue
             }
@@ -421,6 +427,17 @@ public struct MarkdownParser {
             if right { return "r" }
             return "l"
         }
+    }
+
+    /// iA table caption: a standalone `[Caption text]` line below the table
+    /// (not a reference link `[id]: url`, not a footnote `[^id]:`, not a
+    /// reference usage `[text][id]`).
+    static func tableCaption(_ line: String) -> String? {
+        let t = line.trimmingCharacters(in: .whitespaces)
+        guard t.hasPrefix("["), t.hasSuffix("]"), t.count > 2, !t.hasPrefix("[^") else { return nil }
+        let inner = String(t.dropFirst().dropLast())
+        guard !inner.isEmpty, !inner.contains("["), !inner.contains("]") else { return nil }
+        return inner
     }
 
     static func parseStandaloneImage(_ line: String) -> Block? {

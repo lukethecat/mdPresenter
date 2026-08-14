@@ -96,4 +96,14 @@ final class IAMarkdownCoverageTests: XCTestCase {
         XCTAssertEqual(blocks[0].rows[1], ["Widget", "10$", "1$"])
         XCTAssertEqual(blocks[0].rows[2], ["Gift", "0$"], "trailing || merges cells")
     }
+
+    func testTableCaption() {
+        let blocks = MarkdownParser.parseBlocks(
+            "| 指标 | 数值 |\n| --- | --- |\n| 幻灯片 | 5 |\n[最近交易]\n\n备注"
+        )
+        XCTAssertEqual(blocks[0].kind, .table)
+        XCTAssertEqual(blocks[0].metadata["caption"], "最近交易")
+        // The caption must never leak into notes.
+        XCTAssertFalse(blocks.contains { $0.plainText.contains("最近交易") && $0.kind != .table })
+    }
 }

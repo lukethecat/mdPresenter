@@ -161,6 +161,7 @@ struct MediaBlockView: View {
 struct SlideTableView: View {
     let rows: [[String]]
     var alignments: [String] = []
+    var caption: String = ""
     var textColor: Color
     var accent: Color
     var width: CGFloat
@@ -169,18 +170,38 @@ struct SlideTableView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(0..<visibleRows.count, id: \.self) { r in
-                HStack(spacing: 0) {
-                    ForEach(0..<columns, id: \.self) { c in
-                        cellView(row: visibleRows[r], column: c, isHeader: r == 0)
+            // iA 的「quiet colors, readable layouts」：安静的容器 + 明确的表头。
+            VStack(spacing: 0) {
+                ForEach(0..<visibleRows.count, id: \.self) { r in
+                    HStack(spacing: 0) {
+                        ForEach(0..<columns, id: \.self) { c in
+                            cellView(row: visibleRows[r], column: c, isHeader: r == 0)
+                        }
+                    }
+                    .padding(.vertical, cellFont * 0.7)
+                    .background(r == 0 ? accent.opacity(0.14) : Color.clear)
+                    if r < visibleRows.count - 1 {
+                        Rectangle()
+                            .fill(textColor.opacity(r == 0 ? 0.30 : 0.10))
+                            .frame(height: 1)
                     }
                 }
-                .padding(.vertical, cellFont * 0.55)
-                if r < visibleRows.count - 1 {
-                    Rectangle()
-                        .fill(textColor.opacity(r == 0 ? 0.34 : 0.12))
-                        .frame(height: 1)
-                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(textColor.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(textColor.opacity(0.16), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            if !caption.isEmpty {
+                Text(caption)
+                    .font(.system(size: max(9, cellFont * 0.72), weight: .medium))
+                    .foregroundColor(textColor.opacity(0.72))
+                    .padding(.top, max(6, cellFont * 0.4))
             }
         }
     }
@@ -241,7 +262,7 @@ struct SlideTableView: View {
             width: width * columnWeights()[column],
             alignment: alignment(for: column, cell: cell)
         )
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 14)
     }
 }
 
@@ -696,6 +717,7 @@ struct SlideCanvas: View {
             SlideTableView(
                 rows: table?.rows ?? [],
                 alignments: table?.columnAlignments ?? [],
+                caption: table?.metadata["caption"] ?? "",
                 textColor: Color(style.textColor),
                 accent: Color(style.accent),
                 width: tableWidth,
