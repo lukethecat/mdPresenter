@@ -60,8 +60,8 @@ func paint(_ path: CGPath) {
 // 3a. 圆点（Markdown 句点）——像文本里的句号：缩小、沉到基线位置，
 //     与 ">" 组成终端字符般的 ".>" 符号。
 let dotR: CGFloat = 88
-// 注意：NSBitmapImageRep 上下文非翻转（y 向上），y=318 才是视觉上的下三分之一。
-let dotCenter = CGPoint(x: 292, y: 318)
+// 句点垂直居中（与尖括同一条视觉中轴），保留小尺寸的字符感。
+let dotCenter = CGPoint(x: 292, y: 512)
 let dotRect = CGRect(x: dotCenter.x - dotR, y: dotCenter.y - dotR, width: dotR * 2, height: dotR * 2)
 paint(CGPath(ellipseIn: dotRect, transform: nil))
 
