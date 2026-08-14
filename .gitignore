@@ -1,0 +1,6 @@
+.build/
+.tmp/
+.swiftpm/
+*.xcodeproj
+.DS_Store
+Presenter.app
